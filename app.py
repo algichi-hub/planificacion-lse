@@ -8,23 +8,57 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-st.set_page_config(page_title="Planificación LSE", layout="wide")
+
+def get_database_url() -> str | None:
+    """
+    Local: lee DATABASE_URL desde .env / variable de entorno.
+    Streamlit Cloud: lee DATABASE_URL desde st.secrets.
+    """
+    env_url = os.getenv("DATABASE_URL")
+    if env_url:
+        return env_url
+
+    try:
+        return st.secrets.get("DATABASE_URL")
+    except (FileNotFoundError, KeyError):
+        return None
+
+
+DATABASE_URL = get_database_url()
+
+st.set_page_config(
+    page_title="Planificación LSE",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 st.title("Resumen ejecutivo · Planificación LSE")
 
 if not DATABASE_URL:
-    st.error("Falta DATABASE_URL. Configúrala en .env o en los secretos del despliegue.")
+    st.error(
+        "No se ha configurado DATABASE_URL. "
+        "En local añádela al fichero .env; en Streamlit Community Cloud "
+        "añádela en App settings → Secrets."
+    )
     st.stop()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def query(sql: str, params=()) -> pd.DataFrame:
-    with psycopg.connect(DATABASE_URL) as conn:
+    with psycopg.connect(DATABASE_URL, connect_timeout=10) as conn:
         return pd.read_sql_query(sql, conn, params=params)
 
 
-latest = query("SELECT snapshot_date FROM v_latest_snapshot")
+try:
+    latest = query("SELECT snapshot_date FROM v_latest_snapshot")
+except psycopg.Error:
+    st.error(
+        "No se ha podido conectar con PostgreSQL/Neon o el esquema todavía no existe. "
+        "Comprueba DATABASE_URL y ejecuta primero scripts/import_erp.py."
+    )
+    st.stop()
+
 if latest.empty or pd.isna(latest.iloc[0]["snapshot_date"]):
     st.info("La base de datos todavía no contiene ningún snapshot.")
     st.stop()
