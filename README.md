@@ -130,3 +130,49 @@ Para considerar cerrada la V0:
 3. Verificar reconciliación de totales contra el export ERP.
 4. Abrir el dashboard y revisar Proyecto -> OF -> Bono.
 5. Congelar la V0 antes de añadir automatización semanal y forecasting.
+
+
+## Deploy en Streamlit Community Cloud
+
+La rama `v0/sql-dashboard` está preparada para ejecutarse tanto en local como en Streamlit Community Cloud.
+
+### Configuración de la app
+
+En Streamlit Community Cloud:
+
+1. Crear una nueva app desde GitHub.
+2. Repository: `algichi-hub/planificacion-lse`
+3. Branch: `v0/sql-dashboard`
+4. Main file path: `app.py`
+5. En **Advanced settings / Secrets**, añadir:
+
+```toml
+DATABASE_URL = "postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require"
+```
+
+No guardar nunca la URL real de conexión en el repositorio.
+
+La aplicación busca la conexión en este orden:
+
+1. variable de entorno `DATABASE_URL` / fichero local `.env`;
+2. `st.secrets["DATABASE_URL"]` en Streamlit Cloud.
+
+### Antes del primer deploy útil
+
+El dashboard puede publicarse antes, pero para mostrar datos la base Neon debe contener el esquema y al menos un snapshot. La primera carga se realiza con:
+
+```bash
+python scripts/import_erp.py \
+  --hours data/OOFF_OP_Planif_Terminada.txt \
+  --projects data/Proyectos_Sevilla.csv \
+  --snapshot-date YYYY-MM-DD
+```
+
+El propio importador crea/actualiza el esquema SQL antes de cargar los datos.
+
+### Seguridad
+
+- `.env` está excluido de Git.
+- `.streamlit/secrets.toml` está excluido de Git.
+- Streamlit Cloud debe recibir `DATABASE_URL` únicamente mediante su gestor de Secrets.
+- Los exports ERP bajo `data/\*.txt`, `data/\*.csv` y `data/\*.xlsx` están excluidos del repositorio.
