@@ -1,5 +1,132 @@
 # Planificación LSE
 
-V0 para importar los exports ERP de planificación y visualizar horas concedidas vs. incurridas por Proyecto, OF y Bono.
+V0 de un sistema de control de horas basado en SQL para sustituir el resumen ejecutivo manual.
 
-> Estado: scaffold inicial.
+## Objetivo de la V0
+
+Validar el flujo completo:
+
+1. Exportar desde ERP:
+   - `OOFF_OP_Planif_Terminada.txt`
+   - `Proyectos_Sevilla.csv`
+2. Importar y normalizar ambos ficheros.
+3. Persistir la información en PostgreSQL / Neon.
+4. Consultar horas concedidas, incurridas, desviación y consumo.
+5. Navegar por la jerarquía:
+   - Proyecto
+   - Orden de Fabricación
+   - Bono / operación
+
+El Bono se calcula como:
+
+```text
+Bono = Orden + Operación con 4 dígitos
+351201 + 10 -> 3512010010
+```
+
+## Métricas
+
+- Horas concedidas = `T.Conce.`
+- Horas incurridas = `T.Inver.`
+- Desviación = Incurridas - Concedidas
+- Horas restantes = Concedidas - Incurridas
+- Consumo = Incurridas / Concedidas
+
+Una desviación positiva representa sobreconsumo.
+
+## Estructura
+
+```text
+app.py                  Dashboard Streamlit/Plotly
+scripts/import_erp.py   ETL ERP -> PostgreSQL
+sql/schema.sql          Tablas, índices y vistas SQL
+.env.example            Variables de entorno
+requirements.txt        Dependencias Python
+```
+
+## Base de datos
+
+La V0 crea:
+
+- `projects`: maestro de proyectos.
+- `fact_hours`: dato granular del export de OF/operaciones.
+- `imports`: trazabilidad de cargas.
+- `v_project_hours`: agregado por proyecto.
+- `v_order_hours`: agregado por OF.
+- `v_bonus_hours`: agregado por bono.
+- `v_latest_snapshot`: último snapshot disponible.
+
+Los datos se almacenan por `snapshot_date`, por lo que el modelo ya permite conservar histórico semanal.
+
+## Preparación
+
+Python 3.11+ recomendado.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+En Windows PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Configurar en `.env`:
+
+```text
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
+```
+
+## Importar un snapshot
+
+```bash
+python scripts/import_erp.py \
+  --hours data/OOFF_OP_Planif_Terminada.txt \
+  --projects data/Proyectos_Sevilla.csv \
+  --snapshot-date 2026-10-07
+```
+
+Si se vuelve a cargar la misma fecha, la V0 reemplaza el detalle de esa fecha en vez de duplicarlo.
+
+El importador valida las cabeceras, interpreta los decimales con coma y calcula el Bono. Si `T.Pendi.` llega como `########` por desbordamiento de formato del export, recalcula ese valor como `T.Conce. - T.Inver.`.
+
+## Ejecutar dashboard
+
+```bash
+streamlit run app.py
+```
+
+El dashboard muestra:
+
+- KPIs globales o filtrados por proyecto.
+- Horas concedidas vs. incurridas por proyecto.
+- Tabla ejecutiva de proyectos.
+- Tabla de Órdenes de Fabricación.
+- Tabla de Bonos cuando se selecciona un proyecto.
+
+## Validación inicial con los exports reales
+
+La estructura se ha contrastado con los dos ficheros de partida usados para definir esta V0:
+
+- 6.275 filas de horas procesables.
+- 2.694 filas del maestro de proyectos.
+- 0 proyectos de las filas de horas sin correspondencia en el maestro.
+- 0 duplicados detectados para la clave Proyecto + OF + Operación.
+- Se detectó al menos un `T.Pendi.` representado como `########`; queda cubierto por el ETL.
+
+## Siguiente Gate
+
+Para considerar cerrada la V0:
+
+1. Crear/conectar una base Neon.
+2. Ejecutar una carga real.
+3. Verificar reconciliación de totales contra el export ERP.
+4. Abrir el dashboard y revisar Proyecto -> OF -> Bono.
+5. Congelar la V0 antes de añadir automatización semanal y forecasting.
