@@ -143,6 +143,15 @@ def load_hours(cur, path: Path, snapshot: date) -> tuple[int, str]:
             if operation_number is not None else None
         )
 
+        hours_granted = decimal_es(r["T.Conce."])
+        hours_incurred = decimal_es(r["T.Inver."])
+        try:
+            hours_pending = decimal_es(r["T.Pendi."])
+        except ValueError:
+            # Algunos exports ERP muestran ####### por desbordamiento de formato.
+            # El pendiente es derivable de los dos campos base y no debe bloquear la carga.
+            hours_pending = hours_granted - hours_incurred
+
         cur.execute(
             """
             INSERT INTO fact_hours (
@@ -165,9 +174,9 @@ def load_hours(cur, path: Path, snapshot: date) -> tuple[int, str]:
                 r["Descripción"],
                 r["Estat."],
                 date_es(r["F.Lanz."]),
-                decimal_es(r["T.Conce."]),
-                decimal_es(r["T.Inver."]),
-                decimal_es(r["T.Pendi."]),
+                hours_granted,
+                hours_incurred,
+                hours_pending,
                 digest,
             ),
         )
