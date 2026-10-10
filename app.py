@@ -311,7 +311,7 @@ fig = px.bar(
     y="Horas",
     color="Serie",
     barmode="group",
-    labels={"project_code": "Proyecto"},
+    labels={"project_code": "Proyecto", "Horas": ""},
 )
 fig.update_layout(
     template=plotly_template,
