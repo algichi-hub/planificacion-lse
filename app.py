@@ -250,19 +250,55 @@ orders = query(
     order_params,
 )
 
-st.subheader("Órdenes de fabricación")
-orders["consumption_pct"] = orders["consumption_ratio"] * 100
-st.dataframe(
-    orders[
-        [
-            "project_code", "order_number", "order_description", "order_status",
-            "hours_granted", "hours_incurred", "deviation_hours",
-            "remaining_hours", "consumption_pct"
-        ]
-    ],
-    use_container_width=True,
-    hide_index=True,
-)
+if selected_project != "Todos":
+    st.subheader("Concedidas vs. incurridas por Orden de Fabricación")
+    order_chart = orders[["order_number", "hours_granted", "hours_incurred"]].copy()
+    order_chart["order_number"] = order_chart["order_number"].astype(str)
+    order_chart = order_chart.melt(
+        id_vars="order_number",
+        value_vars=["hours_granted", "hours_incurred"],
+        var_name="Serie",
+        value_name="Horas",
+    )
+    order_chart["Serie"] = order_chart["Serie"].map({
+        "hours_granted": "Concedidas",
+        "hours_incurred": "Incurridas",
+    })
+    fig_orders = px.bar(
+        order_chart,
+        y="order_number",
+        x="Horas",
+        color="Serie",
+        barmode="group",
+        orientation="h",
+        color_discrete_map={
+            "Concedidas": "#F2C94C",
+            "Incurridas": "#F2994A",
+        },
+        labels={"order_number": "OF"},
+    )
+    fig_orders.update_layout(
+        yaxis_title=None,
+        xaxis_title="Horas",
+        legend_title_text=None,
+        height=max(320, min(900, 32 * max(len(orders), 1) + 120)),
+        margin=dict(l=10, r=10, t=30, b=10),
+    )
+    st.plotly_chart(fig_orders, use_container_width=True)
+
+    st.subheader("Órdenes de fabricación")
+    orders["consumption_pct"] = orders["consumption_ratio"] * 100
+    st.dataframe(
+        orders[
+            [
+                "project_code", "order_number", "order_description", "order_status",
+                "hours_granted", "hours_incurred", "deviation_hours",
+                "remaining_hours", "consumption_pct"
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
 
 if selected_project != "Todos" and selected_order != "Todas":
     bonuses = query(
@@ -291,6 +327,41 @@ if selected_project != "Todos" and selected_order != "Todas":
         (snapshot, *selected_centers, *selected_managers, selected_project, selected_order),
     )
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
+
+    st.subheader("Concedidas vs. incurridas por Bono de trabajo")
+    bonus_chart = bonuses[["bonus_id", "hours_granted", "hours_incurred"]].copy()
+    bonus_chart["bonus_id"] = bonus_chart["bonus_id"].astype(str)
+    bonus_chart = bonus_chart.melt(
+        id_vars="bonus_id",
+        value_vars=["hours_granted", "hours_incurred"],
+        var_name="Serie",
+        value_name="Horas",
+    )
+    bonus_chart["Serie"] = bonus_chart["Serie"].map({
+        "hours_granted": "Concedidas",
+        "hours_incurred": "Incurridas",
+    })
+    fig_bonuses = px.bar(
+        bonus_chart,
+        y="bonus_id",
+        x="Horas",
+        color="Serie",
+        barmode="group",
+        orientation="h",
+        color_discrete_map={
+            "Concedidas": "#6FCF97",
+            "Incurridas": "#219653",
+        },
+        labels={"bonus_id": "Bono"},
+    )
+    fig_bonuses.update_layout(
+        yaxis_title=None,
+        xaxis_title="Horas",
+        legend_title_text=None,
+        height=max(320, min(900, 32 * max(len(bonuses), 1) + 120)),
+        margin=dict(l=10, r=10, t=30, b=10),
+    )
+    st.plotly_chart(fig_bonuses, use_container_width=True)
 
     st.subheader("Bonos / operaciones")
     st.dataframe(
