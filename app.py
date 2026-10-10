@@ -68,9 +68,9 @@ st.markdown(
         bottom: 0;
         z-index: 9999;
         display: flex;
-        justify-content: center;
-        gap: 4.5rem;
-        padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+        justify-content: flex-start;
+        gap: 2.75rem;
+        padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom));
         background-color: {nav_bg} !important;
         background-image: linear-gradient({nav_bg}, {nav_bg}) !important;
         opacity: 1 !important;
@@ -103,7 +103,10 @@ st.markdown(
     }}
     @media (max-width: 768px) {{
         .bottom-nav {{
-            gap: 6rem;
+            justify-content: flex-start;
+            gap: 2.25rem;
+            padding-left: 1rem;
+            padding-right: 5.5rem;
         }}
     }}
     </style>
