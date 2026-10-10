@@ -334,10 +334,10 @@ st.plotly_chart(
     fig,
     use_container_width=True,
     config={
-        "displayModeBar": false,
-        "scrollZoom": false,
-        "doubleClick": false,
-        "showTips": false,
+        "displayModeBar": False,
+        "scrollZoom": False,
+        "doubleClick": False,
+        "showTips": False,
     },
 )
 
@@ -470,10 +470,10 @@ if selected_project != "Todos":
         fig_orders,
         use_container_width=True,
         config={
-            "displayModeBar": false,
-            "scrollZoom": false,
-            "doubleClick": false,
-            "showTips": false,
+            "displayModeBar": False,
+            "scrollZoom": False,
+            "doubleClick": False,
+            "showTips": False,
         },
     )
 
@@ -596,10 +596,10 @@ if selected_project != "Todos" and selected_order != "Todas":
         fig_bonuses,
         use_container_width=True,
         config={
-            "displayModeBar": false,
-            "scrollZoom": false,
-            "doubleClick": false,
-            "showTips": false,
+            "displayModeBar": False,
+            "scrollZoom": False,
+            "doubleClick": False,
+            "showTips": False,
         },
     )
 
