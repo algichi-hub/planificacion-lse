@@ -43,17 +43,37 @@ st.title(
     else "Análisis de riesgos"
 )
 
-home_active = "active" if view == "home" else ""
-risks_active = "active" if view == "risks" else ""
-
+# Material Symbols font for the bottom navigation icons.
 st.markdown(
-    f"""
+    """
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet">
     <style>
-    .block-container {{
+    .block-container {
         padding-bottom: 6.2rem;
-    }}
-    .bottom-nav {{
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Components v2 receives Streamlit's native --st-* theme variables directly.
+# This keeps the fixed navigation bar fully opaque while following Light/Dark live.
+bottom_nav = st.components.v2.component(
+    "planificacion_bottom_nav",
+    html="""
+    <nav class="bottom-nav" aria-label="Navegación principal">
+        <a href="?view=home" data-view="home">
+            <span class="icon">home</span>
+            <span>Home</span>
+        </a>
+        <a href="?view=risks" data-view="risks">
+            <span class="icon">manage_search</span>
+            <span>Riesgos</span>
+        </a>
+    </nav>
+    """,
+    css="""
+    .bottom-nav {
         position: fixed;
         left: 0;
         right: 0;
@@ -63,15 +83,12 @@ st.markdown(
         justify-content: flex-start;
         gap: 2.75rem;
         padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom));
-        background-color: var(--st-secondary-background-color) !important;
-        background-image: none !important;
-        opacity: 1 !important;
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
+        background-color: var(--st-secondary-background-color);
         border-top: 1px solid var(--st-border-color);
         box-shadow: 0 -4px 16px color-mix(in srgb, var(--st-text-color) 12%, transparent);
-    }}
-    .bottom-nav a {{
+        opacity: 1;
+    }
+    .bottom-nav a {
         min-width: 4.5rem;
         min-height: 2.8rem;
         display: flex;
@@ -83,8 +100,8 @@ st.markdown(
         text-decoration: none;
         font-size: 0.72rem;
         opacity: 0.68;
-    }}
-    .bottom-nav a .icon {{
+    }
+    .bottom-nav a .icon {
         font-family: "Material Symbols Rounded";
         font-weight: normal;
         font-style: normal;
@@ -99,34 +116,34 @@ st.markdown(
         -webkit-font-feature-settings: "liga";
         -webkit-font-smoothing: antialiased;
         font-feature-settings: "liga";
-    }}
-    .bottom-nav a.active {{
+    }
+    .bottom-nav a.active {
         color: var(--st-primary-color);
         opacity: 1;
         font-weight: 700;
-    }}
-    @media (max-width: 768px) {{
-        .bottom-nav {{
+    }
+    @media (max-width: 768px) {
+        .bottom-nav {
             justify-content: flex-start;
             gap: 2.25rem;
             padding-left: 1rem;
             padding-right: 5.5rem;
-        }}
-    }}
-    </style>
-    <nav class="bottom-nav" aria-label="Navegación principal">
-        <a href="?view=home" class="{home_active}">
-            <span class="icon">home</span>
-            <span>Home</span>
-        </a>
-        <a href="?view=risks" class="{risks_active}">
-            <span class="icon">manage_search</span>
-            <span>Riesgos</span>
-        </a>
-    </nav>
+        }
+    }
     """,
-    unsafe_allow_html=True,
+    js="""
+    export default function(component) {
+        const { data, parentElement } = component;
+        const root = parentElement;
+        const links = root.querySelectorAll(".bottom-nav a");
+        links.forEach((link) => {
+            link.classList.toggle("active", link.dataset.view === data.view);
+        });
+    }
+    """,
 )
+bottom_nav(data={"view": view}, key="bottom_nav")
+
 
 if not DATABASE_URL:
     st.error(
