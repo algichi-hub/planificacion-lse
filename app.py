@@ -73,6 +73,79 @@ snapshot_options = [
     pd.Timestamp(value).date()
     for value in snapshots["snapshot_date"].dropna().tolist()
 ]
+
+theme_mode = st.sidebar.radio(
+    "Apariencia",
+    ["Oscuro", "Claro"],
+    index=0,
+    horizontal=True,
+    help="Cambia entre el esquema oscuro actual y un esquema claro.",
+)
+
+if theme_mode == "Claro":
+    app_bg = "#F7F9FC"
+    sidebar_bg = "#FFFFFF"
+    text_color = "#111827"
+    muted_color = "#4B5563"
+    border_color = "#E5E7EB"
+    control_bg = "#FFFFFF"
+    plotly_template = "plotly_white"
+else:
+    app_bg = "#0E1117"
+    sidebar_bg = "#161B22"
+    text_color = "#FAFAFA"
+    muted_color = "#B8C0CC"
+    border_color = "#30363D"
+    control_bg = "#0E1117"
+    plotly_template = "plotly_dark"
+
+px.defaults.template = plotly_template
+
+st.markdown(
+    f"""
+    <style>
+    [data-testid="stAppViewContainer"] {{
+        background-color: {app_bg};
+        color: {text_color};
+    }}
+    [data-testid="stSidebar"] {{
+        background-color: {sidebar_bg};
+        border-right: 1px solid {border_color};
+    }}
+    [data-testid="stHeader"] {{
+        background-color: {app_bg};
+    }}
+    [data-testid="stAppViewContainer"] p,
+    [data-testid="stAppViewContainer"] label,
+    [data-testid="stAppViewContainer"] h1,
+    [data-testid="stAppViewContainer"] h2,
+    [data-testid="stAppViewContainer"] h3,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {{
+        color: {text_color};
+    }}
+    [data-testid="stCaptionContainer"] {{
+        color: {muted_color};
+    }}
+    div[data-baseweb="select"] > div {{
+        background-color: {control_bg};
+        border-color: {border_color};
+        color: {text_color};
+    }}
+    [data-testid="stMetric"] {{
+        border-color: {border_color};
+    }}
+    hr {{
+        border-color: {border_color};
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.sidebar.markdown("### Filtros jerárquicos")
 snapshot = st.sidebar.selectbox(
     "Snapshot",
