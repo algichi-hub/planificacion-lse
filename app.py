@@ -76,10 +76,10 @@ snapshot_options = [
 
 theme_mode = st.sidebar.radio(
     "Apariencia",
-    ["Oscuro", "Claro"],
+    ["Claro", "Oscuro"],
     index=0,
     horizontal=True,
-    help="Cambia entre el esquema oscuro actual y un esquema claro.",
+    help="Cambia entre el esquema claro y oscuro.",
 )
 
 if theme_mode == "Claro":
