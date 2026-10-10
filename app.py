@@ -60,9 +60,10 @@ st.markdown(
         display: flex;
         justify-content: center;
         gap: 4.5rem;
-        padding: 0.65rem 1rem calc(0.65rem + env(safe-area-inset-bottom));
+        padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
         background: var(--secondary-background-color);
         border-top: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+        box-shadow: 0 -4px 14px color-mix(in srgb, var(--text-color) 10%, transparent);
     }}
     .bottom-nav a {{
         min-width: 4.5rem;
