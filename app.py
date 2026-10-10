@@ -215,6 +215,7 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
     column_config={
+        "project_description": st.column_config.TextColumn("Descripción"),
         "consumption_pct": st.column_config.NumberColumn(
             "Consumo %",
             format="%.1f %%",
@@ -327,6 +328,7 @@ if selected_project != "Todos":
         use_container_width=True,
         hide_index=True,
         column_config={
+            "order_description": st.column_config.TextColumn("Descripción"),
             "consumption_pct": st.column_config.NumberColumn(
                 "Consumo %",
                 format="%.1f %%",
@@ -417,6 +419,7 @@ if selected_project != "Todos" and selected_order != "Todas":
         use_container_width=True,
         hide_index=True,
         column_config={
+            "operation_description": st.column_config.TextColumn("Descripción"),
             "consumption_pct": st.column_config.NumberColumn(
                 "Consumo %",
                 format="%.1f %%",
