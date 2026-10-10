@@ -257,6 +257,22 @@ orders = query(
 )
 
 if selected_project != "Todos":
+    of_granted = float(orders["hours_granted"].sum())
+    of_incurred = float(orders["hours_incurred"].sum())
+    of_deviation = of_incurred - of_granted
+    of_consumption = (of_incurred / of_granted) if of_granted else None
+
+    st.subheader(
+        "Resumen Orden de Fabricación"
+        if selected_order == "Todas"
+        else f"Resumen OF {selected_order}"
+    )
+    of1, of2, of3, of4 = st.columns(4)
+    of1.metric("Horas concedidas", f"{of_granted:,.1f} h")
+    of2.metric("Horas incurridas", f"{of_incurred:,.1f} h")
+    of3.metric("Desviación", f"{of_deviation:+,.1f} h")
+    of4.metric("Consumo", "—" if of_consumption is None else f"{of_consumption:.1%}")
+
     st.subheader("Gráfica Concedidas vs. incurridas por Orden de Fabricación")
     order_chart = (
         orders[["order_number", "hours_granted", "hours_incurred"]]
