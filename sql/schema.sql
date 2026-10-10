@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS fact_hours (
     operation_description TEXT,
     order_status TEXT,
     launch_date DATE,
+    work_center TEXT,
     hours_granted NUMERIC(14,2) NOT NULL DEFAULT 0,
     hours_incurred NUMERIC(14,2) NOT NULL DEFAULT 0,
     hours_pending NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -49,6 +50,9 @@ CREATE INDEX IF NOT EXISTS idx_fact_hours_order
 CREATE INDEX IF NOT EXISTS idx_fact_hours_bonus
     ON fact_hours (snapshot_date, bonus_id);
 
+CREATE INDEX IF NOT EXISTS idx_fact_hours_work_center
+    ON fact_hours (snapshot_date, work_center);
+
 CREATE OR REPLACE VIEW v_latest_snapshot AS
 SELECT MAX(snapshot_date) AS snapshot_date
 FROM fact_hours;
@@ -57,6 +61,7 @@ CREATE OR REPLACE VIEW v_project_hours AS
 SELECT
     f.snapshot_date,
     f.project_code,
+    f.work_center,
     COALESCE(MAX(p.description), MAX(f.project_code)) AS project_description,
     MAX(p.customer) AS customer,
     MAX(p.status) AS project_status,
@@ -71,12 +76,13 @@ SELECT
     END AS consumption_ratio
 FROM fact_hours f
 LEFT JOIN projects p ON p.project_code = f.project_code
-GROUP BY f.snapshot_date, f.project_code;
+GROUP BY f.snapshot_date, f.project_code, f.work_center;
 
 CREATE OR REPLACE VIEW v_order_hours AS
 SELECT
     f.snapshot_date,
     f.project_code,
+    f.work_center,
     f.order_number,
     MAX(f.order_description) AS order_description,
     MAX(f.order_status) AS order_status,
@@ -89,12 +95,13 @@ SELECT
         ELSE SUM(f.hours_incurred) / SUM(f.hours_granted)
     END AS consumption_ratio
 FROM fact_hours f
-GROUP BY f.snapshot_date, f.project_code, f.order_number;
+GROUP BY f.snapshot_date, f.project_code, f.work_center, f.order_number;
 
 CREATE OR REPLACE VIEW v_bonus_hours AS
 SELECT
     f.snapshot_date,
     f.project_code,
+    f.work_center,
     f.order_number,
     f.operation_number,
     f.bonus_id,
@@ -111,6 +118,7 @@ FROM fact_hours f
 GROUP BY
     f.snapshot_date,
     f.project_code,
+    f.work_center,
     f.order_number,
     f.operation_number,
     f.bonus_id;
