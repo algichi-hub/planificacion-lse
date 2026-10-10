@@ -370,8 +370,10 @@ if selected_project != "Todos" and selected_order != "Todas":
 
         xaxis_title="Horas",
         legend_title_text=None,
-        height=max(320, min(900, 32 * max(len(bonuses), 1) + 120)),
-        margin=dict(l=10, r=10, t=30, b=10),
+        height=max(260, min(700, 22 * max(len(bonuses), 1) + 100)),
+        bargap=0.12,
+        bargroupgap=0.03,
+        margin=dict(l=10, r=10, t=20, b=10),
     )
     st.plotly_chart(fig_bonuses, use_container_width=True)
 
