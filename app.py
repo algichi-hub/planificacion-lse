@@ -290,11 +290,9 @@ st.subheader(
     if selected_project == "Todos"
     else f"RESUMEN PROYECTO {selected_project}"
 )
-c1, c2, c3, c4 = st.columns(4)
+c1, c2 = st.columns(2)
 c1.metric("Horas concedidas", f"{granted:,.1f} h")
-c2.metric("Horas incurridas", f"{incurred:,.1f} h")
-c3.metric("Desviación", f"{deviation:+,.1f} h")
-c4.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
+c2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
 
 st.subheader("Gráfica Concedidas vs. incurridas por Proyecto")
 chart_df = filtered_projects[["project_code", "hours_granted", "hours_incurred"]].copy()
@@ -323,6 +321,15 @@ fig.update_layout(
     font_color=text_color,
     xaxis=dict(gridcolor=grid_color),
     yaxis=dict(gridcolor=grid_color),
+    legend=dict(
+        orientation="h",
+        yanchor="top",
+        y=-0.18,
+        xanchor="center",
+        x=0.5,
+        title=None,
+    ),
+    margin=dict(l=10, r=10, t=20, b=80),
 )
 st.plotly_chart(fig, use_container_width=True)
 
@@ -394,11 +401,9 @@ if selected_project != "Todos":
         if selected_order == "Todas"
         else f"RESUMEN OF {selected_order}"
     )
-    of1, of2, of3, of4 = st.columns(4)
+    of1, of2 = st.columns(2)
     of1.metric("Horas concedidas", f"{of_granted:,.1f} h")
-    of2.metric("Horas incurridas", f"{of_incurred:,.1f} h")
-    of3.metric("Desviación", f"{of_deviation:+,.1f} h")
-    of4.metric("Consumo", "—" if of_consumption is None else f"{of_consumption:.1%}")
+    of2.metric("Consumo", "—" if of_consumption is None else f"{of_consumption:.1%}")
 
     st.subheader("Gráfica Concedidas vs. incurridas por Orden de Fabricación")
     order_chart = (
@@ -445,6 +450,15 @@ if selected_project != "Todos":
         plot_bgcolor=plot_bg,
         font_color=text_color,
         xaxis=dict(gridcolor=grid_color),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.12,
+            xanchor="center",
+            x=0.5,
+            title=None,
+        ),
+        margin=dict(l=10, r=10, t=20, b=70),
     )
     st.plotly_chart(fig_orders, use_container_width=True)
 
@@ -504,11 +518,9 @@ if selected_project != "Todos" and selected_order != "Todas":
     bonus_consumption = (bonus_incurred / bonus_granted) if bonus_granted else None
 
     st.subheader(f"RESUMEN BONOS OF {selected_order}")
-    b1, b2, b3, b4 = st.columns(4)
+    b1, b2 = st.columns(2)
     b1.metric("Horas concedidas", f"{bonus_granted:,.1f} h")
-    b2.metric("Horas incurridas", f"{bonus_incurred:,.1f} h")
-    b3.metric("Desviación", f"{bonus_deviation:+,.1f} h")
-    b4.metric("Consumo", "—" if bonus_consumption is None else f"{bonus_consumption:.1%}")
+    b2.metric("Consumo", "—" if bonus_consumption is None else f"{bonus_consumption:.1%}")
 
     st.subheader("Gráfica Concedidas vs. incurridas por Bono de trabajo")
     bonus_chart = (
@@ -557,6 +569,15 @@ if selected_project != "Todos" and selected_order != "Todas":
         plot_bgcolor=plot_bg,
         font_color=text_color,
         xaxis=dict(gridcolor=grid_color),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.12,
+            xanchor="center",
+            x=0.5,
+            title=None,
+        ),
+        margin=dict(l=10, r=10, t=20, b=70),
     )
     st.plotly_chart(fig_bonuses, use_container_width=True)
 
