@@ -74,206 +74,6 @@ snapshot_options = [
     for value in snapshots["snapshot_date"].dropna().tolist()
 ]
 
-theme_mode = st.sidebar.radio(
-    "Apariencia",
-    ["Claro", "Oscuro"],
-    index=0,
-    horizontal=True,
-    help="Cambia entre el esquema claro y oscuro.",
-)
-
-if theme_mode == "Claro":
-    app_bg = "#F7F9FC"
-    sidebar_bg = "#FFFFFF"
-    text_color = "#111827"
-    muted_color = "#4B5563"
-    border_color = "#E5E7EB"
-    control_bg = "#FFFFFF"
-    panel_bg = "#FFFFFF"
-    plot_bg = "#FFFFFF"
-    grid_color = "#E5E7EB"
-    plotly_template = "plotly_white"
-else:
-    app_bg = "#0E1117"
-    sidebar_bg = "#161B22"
-    text_color = "#FAFAFA"
-    muted_color = "#B8C0CC"
-    border_color = "#30363D"
-    control_bg = "#0E1117"
-    panel_bg = "#161B22"
-    plot_bg = "#0E1117"
-    grid_color = "#30363D"
-    plotly_template = "plotly_dark"
-
-px.defaults.template = plotly_template
-
-dark_extra_css = ""
-if theme_mode == "Oscuro":
-    dark_extra_css = """
-    /* Sidebar controls: dark surfaces with high-contrast text/icons */
-    [data-testid="stSidebar"] div[data-baseweb="select"] > div,
-    [data-testid="stSidebar"] div[data-baseweb="input"] > div,
-    [data-testid="stSidebar"] div[data-baseweb="base-input"],
-    [data-testid="stSidebar"] [role="combobox"] {
-        background: #0E1117 !important;
-        color: #FAFAFA !important;
-        border-color: #3A424E !important;
-    }
-
-    [data-testid="stSidebar"] div[data-baseweb="select"] span,
-    [data-testid="stSidebar"] div[data-baseweb="select"] input,
-    [data-testid="stSidebar"] div[data-baseweb="input"] input,
-    [data-testid="stSidebar"] [role="combobox"],
-    [data-testid="stSidebar"] [role="combobox"] * {
-        color: #FAFAFA !important;
-        -webkit-text-fill-color: #FAFAFA !important;
-    }
-
-    [data-testid="stSidebar"] div[data-baseweb="select"] svg,
-    [data-testid="stSidebar"] div[data-baseweb="input"] svg,
-    [data-testid="stSidebar"] button svg {
-        fill: #E6EDF3 !important;
-        color: #E6EDF3 !important;
-    }
-
-    [data-baseweb="popover"],
-    [data-baseweb="popover"] > div,
-    [role="listbox"],
-    ul[role="listbox"] {
-        background: #161B22 !important;
-        color: #FAFAFA !important;
-        border-color: #3A424E !important;
-    }
-
-    [role="option"],
-    [role="option"] *,
-    li[role="option"],
-    li[role="option"] * {
-        background: #161B22 !important;
-        color: #FAFAFA !important;
-        -webkit-text-fill-color: #FAFAFA !important;
-    }
-
-    [role="option"]:hover,
-    [role="option"][aria-selected="true"] {
-        background: #27313C !important;
-        color: #FFFFFF !important;
-    }
-
-    /* Multiselect chips */
-    [data-testid="stSidebar"] span[data-baseweb="tag"],
-    [data-testid="stSidebar"] span[data-baseweb="tag"] * {
-        color: #FFFFFF !important;
-    }
-
-    /* Dataframes/tables: keep every visible surface dark */
-    [data-testid="stDataFrame"],
-    [data-testid="stDataFrame"] > div,
-    [data-testid="stDataFrame"] section,
-    [data-testid="stDataFrame"] div[role="grid"],
-    [data-testid="stDataFrame"] div[role="row"],
-    [data-testid="stDataFrame"] div[role="gridcell"],
-    [data-testid="stDataFrame"] div[role="columnheader"],
-    [data-testid="stTable"],
-    [data-testid="stTable"] table,
-    [data-testid="stTable"] thead,
-    [data-testid="stTable"] tbody,
-    [data-testid="stTable"] tr,
-    [data-testid="stTable"] th,
-    [data-testid="stTable"] td {
-        background: #161B22 !important;
-        color: #FAFAFA !important;
-        border-color: #30363D !important;
-    }
-
-    [data-testid="stDataFrame"] *,
-    [data-testid="stTable"] * {
-        color: #FAFAFA !important;
-    }
-
-    /* Metric panels and Plotly containers */
-    [data-testid="stMetric"],
-    [data-testid="stPlotlyChart"],
-    [data-testid="stPlotlyChart"] > div {
-        background: #0E1117 !important;
-        color: #FAFAFA !important;
-    }
-
-    /* Mobile readability */
-    @media (max-width: 768px) {
-        [data-testid="stSidebar"] label,
-        [data-testid="stSidebar"] p,
-        [data-testid="stSidebar"] span,
-        [data-testid="stSidebar"] input,
-        [role="option"] {
-            color: #FFFFFF !important;
-            -webkit-text-fill-color: #FFFFFF !important;
-        }
-    }
-    """
-
-st.markdown(
-    f"""
-    <style>
-    [data-testid="stAppViewContainer"] {{
-        background-color: {app_bg};
-        color: {text_color};
-    }}
-    [data-testid="stSidebar"] {{
-        background-color: {sidebar_bg};
-        border-right: 1px solid {border_color};
-    }}
-    [data-testid="stHeader"] {{
-        background-color: {app_bg};
-    }}
-    [data-testid="stAppViewContainer"] p,
-    [data-testid="stAppViewContainer"] label,
-    [data-testid="stAppViewContainer"] h1,
-    [data-testid="stAppViewContainer"] h2,
-    [data-testid="stAppViewContainer"] h3,
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] h1,
-    [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3 {{
-        color: {text_color};
-    }}
-    [data-testid="stCaptionContainer"] {{
-        color: {muted_color};
-    }}
-    div[data-baseweb="select"] > div,
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="base-input"],
-    div[role="listbox"],
-    ul[role="listbox"] {{
-        background-color: {control_bg} !important;
-        border-color: {border_color} !important;
-        color: {text_color} !important;
-    }}
-    [data-testid="stMetric"],
-    [data-testid="stDataFrame"],
-    [data-testid="stTable"],
-    [data-testid="stPlotlyChart"] {{
-        background-color: {panel_bg} !important;
-        border-color: {border_color} !important;
-    }}
-    [data-testid="stDataFrame"] > div,
-    [data-testid="stTable"] > div,
-    [data-testid="stPlotlyChart"] > div {{
-        background-color: {panel_bg} !important;
-    }}
-    [data-testid="stDataFrame"] canvas {{
-        background-color: {panel_bg} !important;
-    }}
-    hr {{
-        border-color: {border_color};
-    }}
-    {dark_extra_css}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 st.sidebar.markdown("### Filtros jerárquicos")
 snapshot = st.sidebar.selectbox(
     "Snapshot",
@@ -420,12 +220,8 @@ fig = px.bar(
     labels={"project_code": "Proyecto", "Horas": ""},
 )
 fig.update_layout(
-    template=plotly_template,
-    paper_bgcolor=plot_bg,
-    plot_bgcolor=plot_bg,
-    font_color=text_color,
-    xaxis=dict(gridcolor=grid_color, fixedrange=True),
-    yaxis=dict(gridcolor=grid_color, fixedrange=True),
+    xaxis=dict(fixedrange=True),
+    yaxis=dict(fixedrange=True),
     dragmode=False,
     legend=dict(
         orientation="h",
@@ -440,6 +236,7 @@ fig.update_layout(
 st.plotly_chart(
     fig,
     use_container_width=True,
+    theme="streamlit",
     config={
         "displayModeBar": False,
         "scrollZoom": False,
@@ -563,11 +360,7 @@ if selected_project != "Todos":
         margin=dict(l=10, r=10, t=30, b=10),
     )
     fig_orders.update_layout(
-        template=plotly_template,
-        paper_bgcolor=plot_bg,
-        plot_bgcolor=plot_bg,
-        font_color=text_color,
-        xaxis=dict(gridcolor=grid_color, fixedrange=True),
+        xaxis_fixedrange=True,
         yaxis_fixedrange=True,
         dragmode=False,
         legend=dict(
@@ -583,6 +376,7 @@ if selected_project != "Todos":
     st.plotly_chart(
         fig_orders,
         use_container_width=True,
+        theme="streamlit",
         config={
             "displayModeBar": False,
             "scrollZoom": False,
@@ -696,11 +490,7 @@ if selected_project != "Todos" and selected_order != "Todas":
         margin=dict(l=10, r=10, t=20, b=10),
     )
     fig_bonuses.update_layout(
-        template=plotly_template,
-        paper_bgcolor=plot_bg,
-        plot_bgcolor=plot_bg,
-        font_color=text_color,
-        xaxis=dict(gridcolor=grid_color, fixedrange=True),
+        xaxis_fixedrange=True,
         yaxis_fixedrange=True,
         dragmode=False,
         legend=dict(
@@ -716,6 +506,7 @@ if selected_project != "Todos" and selected_order != "Todas":
     st.plotly_chart(
         fig_bonuses,
         use_container_width=True,
+        theme="streamlit",
         config={
             "displayModeBar": False,
             "scrollZoom": False,
