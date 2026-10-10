@@ -45,6 +45,16 @@ st.title(
 
 home_active = "active" if view == "home" else ""
 risks_active = "active" if view == "risks" else ""
+
+try:
+    active_theme = st.context.theme.type
+except Exception:
+    active_theme = "light"
+
+nav_bg = "#161B22" if active_theme == "dark" else "#FFFFFF"
+nav_border = "#30363D" if active_theme == "dark" else "#E5E7EB"
+nav_shadow = "rgba(0, 0, 0, 0.35)" if active_theme == "dark" else "rgba(17, 24, 39, 0.14)"
+
 st.markdown(
     f"""
     <style>
@@ -61,9 +71,13 @@ st.markdown(
         justify-content: center;
         gap: 4.5rem;
         padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
-        background: var(--secondary-background-color);
-        border-top: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
-        box-shadow: 0 -4px 14px color-mix(in srgb, var(--text-color) 10%, transparent);
+        background-color: {nav_bg} !important;
+        background-image: linear-gradient({nav_bg}, {nav_bg}) !important;
+        opacity: 1 !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border-top: 1px solid {nav_border};
+        box-shadow: 0 -4px 16px {nav_shadow};
     }}
     .bottom-nav a {{
         min-width: 4.5rem;
