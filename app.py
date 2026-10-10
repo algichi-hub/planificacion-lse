@@ -173,6 +173,11 @@ incurred = float(filtered_projects["hours_incurred"].sum())
 deviation = incurred - granted
 consumption = (incurred / granted) if granted else None
 
+st.subheader(
+    "RESUMEN PROYECTO"
+    if selected_project == "Todos"
+    else f"RESUMEN PROYECTO {selected_project}"
+)
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Horas concedidas", f"{granted:,.1f} h")
 c2.metric("Horas incurridas", f"{incurred:,.1f} h")
@@ -264,9 +269,9 @@ if selected_project != "Todos":
     of_consumption = (of_incurred / of_granted) if of_granted else None
 
     st.subheader(
-        "Resumen Orden de Fabricación"
+        "RESUMEN ORDEN DE FABRICACIÓN"
         if selected_order == "Todas"
-        else f"Resumen OF {selected_order}"
+        else f"RESUMEN OF {selected_order}"
     )
     of1, of2, of3, of4 = st.columns(4)
     of1.metric("Horas concedidas", f"{of_granted:,.1f} h")
