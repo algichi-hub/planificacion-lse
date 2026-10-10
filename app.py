@@ -66,14 +66,52 @@ if latest.empty or pd.isna(latest.iloc[0]["snapshot_date"]):
 snapshot = latest.iloc[0]["snapshot_date"]
 st.caption(f"Snapshot activo: {snapshot}")
 
-projects = query(
+work_centers = query(
     """
-    SELECT *
-    FROM v_project_hours
+    SELECT DISTINCT work_center
+    FROM fact_hours
     WHERE snapshot_date = %s
-    ORDER BY deviation_hours DESC, project_code
+      AND work_center IS NOT NULL
+    ORDER BY work_center
     """,
     (snapshot,),
+)
+available_centers = work_centers["work_center"].astype(str).tolist()
+default_centers = ["422"] if "422" in available_centers else available_centers
+selected_centers = st.sidebar.multiselect(
+    "Centro de trabajo (Ct.)",
+    available_centers,
+    default=default_centers,
+    help="Selecciona uno o varios centros de trabajo. Por defecto se muestra el 422.",
+)
+
+if not selected_centers:
+    st.warning("Selecciona al menos un centro de trabajo (Ct.) para visualizar datos.")
+    st.stop()
+
+placeholders = ",".join(["%s"] * len(selected_centers))
+projects = query(
+    f"""
+    SELECT
+        f.project_code,
+        COALESCE(MAX(p.description), MAX(f.project_code)) AS project_description,
+        MAX(p.customer) AS customer,
+        MAX(p.status) AS project_status,
+        MAX(p.project_manager) AS project_manager,
+        SUM(f.hours_granted) AS hours_granted,
+        SUM(f.hours_incurred) AS hours_incurred,
+        SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
+        SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
+        CASE WHEN SUM(f.hours_granted)=0 THEN NULL
+             ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
+    FROM fact_hours f
+    LEFT JOIN projects p ON p.project_code = f.project_code
+    WHERE f.snapshot_date = %s
+      AND f.work_center IN ({placeholders})
+    GROUP BY f.project_code
+    ORDER BY deviation_hours DESC, f.project_code
+    """,
+    (snapshot, *selected_centers),
 )
 
 all_projects = ["Todos"] + projects["project_code"].dropna().astype(str).tolist()
@@ -131,15 +169,31 @@ st.dataframe(
     hide_index=True,
 )
 
-order_params = (snapshot,) if selected_project == "Todos" else (snapshot, selected_project)
-order_filter = "" if selected_project == "Todos" else "AND project_code = %s"
+order_params = (snapshot, *selected_centers)
+order_filter = ""
+if selected_project != "Todos":
+    order_filter = "AND f.project_code = %s"
+    order_params = (*order_params, selected_project)
+
 orders = query(
     f"""
-    SELECT *
-    FROM v_order_hours
-    WHERE snapshot_date = %s
+    SELECT
+        f.project_code,
+        f.order_number,
+        MAX(f.order_description) AS order_description,
+        MAX(f.order_status) AS order_status,
+        SUM(f.hours_granted) AS hours_granted,
+        SUM(f.hours_incurred) AS hours_incurred,
+        SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
+        SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
+        CASE WHEN SUM(f.hours_granted)=0 THEN NULL
+             ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
+    FROM fact_hours f
+    WHERE f.snapshot_date = %s
+      AND f.work_center IN ({placeholders})
       {order_filter}
-    ORDER BY deviation_hours DESC, order_number
+    GROUP BY f.project_code, f.order_number
+    ORDER BY deviation_hours DESC, f.order_number
     """,
     order_params,
 )
@@ -160,14 +214,26 @@ st.dataframe(
 
 if selected_project != "Todos":
     bonuses = query(
-        """
-        SELECT *
-        FROM v_bonus_hours
-        WHERE snapshot_date = %s
-          AND project_code = %s
-        ORDER BY deviation_hours DESC, order_number, operation_number
+        f"""
+        SELECT
+            f.order_number,
+            f.operation_number,
+            f.bonus_id,
+            MAX(f.operation_description) AS operation_description,
+            SUM(f.hours_granted) AS hours_granted,
+            SUM(f.hours_incurred) AS hours_incurred,
+            SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
+            SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
+            CASE WHEN SUM(f.hours_granted)=0 THEN NULL
+                 ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
+        FROM fact_hours f
+        WHERE f.snapshot_date = %s
+          AND f.work_center IN ({placeholders})
+          AND f.project_code = %s
+        GROUP BY f.order_number, f.operation_number, f.bonus_id
+        ORDER BY deviation_hours DESC, f.order_number, f.operation_number
         """,
-        (snapshot, selected_project),
+        (snapshot, *selected_centers, selected_project),
     )
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
