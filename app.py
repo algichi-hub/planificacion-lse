@@ -33,7 +33,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-st.title("Resumen ejecutivo · Planificación LSE")
+st.title("Cuadro de mando Planificación")
 
 if not DATABASE_URL:
     st.error(
@@ -179,7 +179,7 @@ c2.metric("Horas incurridas", f"{incurred:,.1f} h")
 c3.metric("Desviación", f"{deviation:+,.1f} h")
 c4.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
 
-st.subheader("Concedidas vs. incurridas por proyecto")
+st.subheader("Gráfica Concedidas vs. incurridas por Proyecto")
 chart_df = filtered_projects[["project_code", "hours_granted", "hours_incurred"]].copy()
 chart_df = chart_df.melt(
     id_vars="project_code",
@@ -201,7 +201,7 @@ fig = px.bar(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-st.subheader("Proyectos")
+st.subheader("Tabla Concedidas vs. incurridas por Proyecto")
 project_table = filtered_projects.copy()
 project_table["consumption_pct"] = project_table["consumption_ratio"] * 100
 st.dataframe(
@@ -214,6 +214,12 @@ st.dataframe(
     ],
     use_container_width=True,
     hide_index=True,
+    column_config={
+        "consumption_pct": st.column_config.NumberColumn(
+            "Consumo %",
+            format="%.1f %%",
+        )
+    },
 )
 
 order_params = (snapshot, *selected_centers, *selected_managers)
@@ -251,7 +257,7 @@ orders = query(
 )
 
 if selected_project != "Todos":
-    st.subheader("Concedidas vs. incurridas por Orden de Fabricación")
+    st.subheader("Gráfica Concedidas vs. incurridas por Orden de Fabricación")
     order_chart = (
         orders[["order_number", "hours_granted", "hours_incurred"]]
         .groupby("order_number", as_index=False)[["hours_granted", "hours_incurred"]]
@@ -292,7 +298,7 @@ if selected_project != "Todos":
     )
     st.plotly_chart(fig_orders, use_container_width=True)
 
-    st.subheader("Órdenes de fabricación")
+    st.subheader("Tabla Concedidas vs. incurridas por Orden de Fabricación")
     orders["consumption_pct"] = orders["consumption_ratio"] * 100
     st.dataframe(
         orders[
@@ -304,6 +310,12 @@ if selected_project != "Todos":
         ],
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "consumption_pct": st.column_config.NumberColumn(
+                "Consumo %",
+                format="%.1f %%",
+            )
+        },
     )
 
 if selected_project != "Todos" and selected_order != "Todas":
@@ -334,7 +346,7 @@ if selected_project != "Todos" and selected_order != "Todas":
     )
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
-    st.subheader("Concedidas vs. incurridas por Bono de trabajo")
+    st.subheader("Gráfica Concedidas vs. incurridas por Bono de trabajo")
     bonus_chart = (
         bonuses[["bonus_id", "hours_granted", "hours_incurred"]]
         .groupby("bonus_id", as_index=False)[["hours_granted", "hours_incurred"]]
@@ -377,7 +389,7 @@ if selected_project != "Todos" and selected_order != "Todas":
     )
     st.plotly_chart(fig_bonuses, use_container_width=True)
 
-    st.subheader("Bonos / operaciones")
+    st.subheader("Tabla Concedidas vs. incurridas por Bono de trabajo")
     st.dataframe(
         bonuses[
             [
@@ -387,4 +399,10 @@ if selected_project != "Todos" and selected_order != "Todas":
         ],
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "consumption_pct": st.column_config.NumberColumn(
+                "Consumo %",
+                format="%.1f %%",
+            )
+        },
     )
