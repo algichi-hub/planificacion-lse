@@ -107,6 +107,111 @@ else:
 
 px.defaults.template = plotly_template
 
+dark_extra_css = ""
+if theme_mode == "Oscuro":
+    dark_extra_css = """
+    /* Sidebar controls: dark surfaces with high-contrast text/icons */
+    [data-testid="stSidebar"] div[data-baseweb="select"] > div,
+    [data-testid="stSidebar"] div[data-baseweb="input"] > div,
+    [data-testid="stSidebar"] div[data-baseweb="base-input"],
+    [data-testid="stSidebar"] [role="combobox"] {
+        background: #0E1117 !important;
+        color: #FAFAFA !important;
+        border-color: #3A424E !important;
+    }
+
+    [data-testid="stSidebar"] div[data-baseweb="select"] span,
+    [data-testid="stSidebar"] div[data-baseweb="select"] input,
+    [data-testid="stSidebar"] div[data-baseweb="input"] input,
+    [data-testid="stSidebar"] [role="combobox"],
+    [data-testid="stSidebar"] [role="combobox"] * {
+        color: #FAFAFA !important;
+        -webkit-text-fill-color: #FAFAFA !important;
+    }
+
+    [data-testid="stSidebar"] div[data-baseweb="select"] svg,
+    [data-testid="stSidebar"] div[data-baseweb="input"] svg,
+    [data-testid="stSidebar"] button svg {
+        fill: #E6EDF3 !important;
+        color: #E6EDF3 !important;
+    }
+
+    [data-baseweb="popover"],
+    [data-baseweb="popover"] > div,
+    [role="listbox"],
+    ul[role="listbox"] {
+        background: #161B22 !important;
+        color: #FAFAFA !important;
+        border-color: #3A424E !important;
+    }
+
+    [role="option"],
+    [role="option"] *,
+    li[role="option"],
+    li[role="option"] * {
+        background: #161B22 !important;
+        color: #FAFAFA !important;
+        -webkit-text-fill-color: #FAFAFA !important;
+    }
+
+    [role="option"]:hover,
+    [role="option"][aria-selected="true"] {
+        background: #27313C !important;
+        color: #FFFFFF !important;
+    }
+
+    /* Multiselect chips */
+    [data-testid="stSidebar"] span[data-baseweb="tag"],
+    [data-testid="stSidebar"] span[data-baseweb="tag"] * {
+        color: #FFFFFF !important;
+    }
+
+    /* Dataframes/tables: keep every visible surface dark */
+    [data-testid="stDataFrame"],
+    [data-testid="stDataFrame"] > div,
+    [data-testid="stDataFrame"] section,
+    [data-testid="stDataFrame"] div[role="grid"],
+    [data-testid="stDataFrame"] div[role="row"],
+    [data-testid="stDataFrame"] div[role="gridcell"],
+    [data-testid="stDataFrame"] div[role="columnheader"],
+    [data-testid="stTable"],
+    [data-testid="stTable"] table,
+    [data-testid="stTable"] thead,
+    [data-testid="stTable"] tbody,
+    [data-testid="stTable"] tr,
+    [data-testid="stTable"] th,
+    [data-testid="stTable"] td {
+        background: #161B22 !important;
+        color: #FAFAFA !important;
+        border-color: #30363D !important;
+    }
+
+    [data-testid="stDataFrame"] *,
+    [data-testid="stTable"] * {
+        color: #FAFAFA !important;
+    }
+
+    /* Metric panels and Plotly containers */
+    [data-testid="stMetric"],
+    [data-testid="stPlotlyChart"],
+    [data-testid="stPlotlyChart"] > div {
+        background: #0E1117 !important;
+        color: #FAFAFA !important;
+    }
+
+    /* Mobile readability */
+    @media (max-width: 768px) {
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] input,
+        [role="option"] {
+            color: #FFFFFF !important;
+            -webkit-text-fill-color: #FFFFFF !important;
+        }
+    }
+    """
+
 st.markdown(
     f"""
     <style>
@@ -163,6 +268,7 @@ st.markdown(
     hr {{
         border-color: {border_color};
     }}
+    {dark_extra_css}
     </style>
     """,
     unsafe_allow_html=True,
