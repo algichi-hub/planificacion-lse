@@ -123,7 +123,7 @@ def load_hours(cur, path: Path, snapshot: date) -> tuple[int, str]:
     headers, rows = rows_pipe(path)
     required = {
         "Orden", "Artículo", "Descripcion", "Estat.", "F.Lanz.", "Opr.",
-        "Descripción", "T.Conce.", "T.Inver.", "T.Pendi.", "Proyec"
+        "Descripción", "Ct.", "T.Conce.", "T.Inver.", "T.Pendi.", "Proyec"
     }
     require_headers(headers, required, path)
 
@@ -157,10 +157,10 @@ def load_hours(cur, path: Path, snapshot: date) -> tuple[int, str]:
             INSERT INTO fact_hours (
                 snapshot_date, source_row_no, project_code, order_number,
                 operation_number, bonus_id, article, order_description,
-                operation_description, order_status, launch_date,
+                operation_description, order_status, launch_date, work_center,
                 hours_granted, hours_incurred, hours_pending, source_file_hash
             )
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
                 snapshot,
@@ -174,6 +174,7 @@ def load_hours(cur, path: Path, snapshot: date) -> tuple[int, str]:
                 r["Descripción"],
                 r["Estat."],
                 date_es(r["F.Lanz."]),
+                r["Ct."].strip() or None,
                 hours_granted,
                 hours_incurred,
                 hours_pending,
