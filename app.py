@@ -57,6 +57,7 @@ nav_shadow = "rgba(0, 0, 0, 0.35)" if active_theme == "dark" else "rgba(17, 24, 
 
 st.markdown(
     f"""
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet">
     <style>
     .block-container {{
         padding-bottom: 6.2rem;
@@ -93,8 +94,20 @@ st.markdown(
         opacity: 0.68;
     }}
     .bottom-nav a .icon {{
-        font-size: 1.35rem;
+        font-family: "Material Symbols Rounded";
+        font-weight: normal;
+        font-style: normal;
+        font-size: 1.55rem;
         line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
+        -webkit-font-feature-settings: "liga";
+        -webkit-font-smoothing: antialiased;
+        font-feature-settings: "liga";
     }}
     .bottom-nav a.active {{
         color: var(--primary-color);
@@ -112,11 +125,11 @@ st.markdown(
     </style>
     <nav class="bottom-nav" aria-label="Navegación principal">
         <a href="?view=home" class="{home_active}">
-            <span class="icon">⌂</span>
+            <span class="icon">home</span>
             <span>Home</span>
         </a>
         <a href="?view=risks" class="{risks_active}">
-            <span class="icon">⚠</span>
+            <span class="icon">manage_search</span>
             <span>Riesgos</span>
         </a>
     </nav>
