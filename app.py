@@ -161,29 +161,7 @@ projects = query(
 )
 
 all_projects = ["Todos"] + projects["project_code"].dropna().astype(str).tolist()
-selected_project = st.sidebar.selectbox("Project · Proyecto", all_projects)
-
-selected_order = "Todas"
-if selected_project != "Todos":
-    order_options_df = query(
-        f"""
-        SELECT DISTINCT f.order_number
-        FROM fact_hours f
-        LEFT JOIN projects p ON p.project_code = f.project_code
-        WHERE f.snapshot_date = %s
-          AND f.work_center IN ({center_placeholders})
-          AND p.project_manager IN ({manager_placeholders})
-          AND f.project_code = %s
-        ORDER BY f.order_number
-        """,
-        (snapshot, *selected_centers, *selected_managers, selected_project),
-    )
-    all_orders = ["Todas"] + order_options_df["order_number"].dropna().astype(str).tolist()
-    selected_order = st.sidebar.selectbox("OF · Orden de Fabricación", all_orders)
-
 filtered_projects = projects
-if selected_project != "Todos":
-    filtered_projects = projects[projects["project_code"].astype(str) == selected_project]
 
 granted = float(filtered_projects["hours_granted"].sum())
 incurred = float(filtered_projects["hours_incurred"].sum())
@@ -191,11 +169,7 @@ deviation = incurred - granted
 consumption = (incurred / granted) if granted else None
 
 st.divider()
-st.subheader(
-    "RESUMEN PROYECTO"
-    if selected_project == "Todos"
-    else f"RESUMEN PROYECTO {selected_project}"
-)
+st.subheader("RESUMEN PROYECTO")
 c1, c2 = st.columns(2)
 c1.metric("Horas concedidas", f"{granted:,.1f} h")
 c2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
@@ -266,14 +240,18 @@ st.dataframe(
     },
 )
 
+selected_project = st.selectbox(
+    "Project · Proyecto",
+    all_projects,
+    key="project_filter",
+    help="Selecciona un proyecto para desplegar sus Órdenes de Fabricación.",
+)
+
 order_params = (snapshot, *selected_centers, *selected_managers)
 order_filter = ""
 if selected_project != "Todos":
     order_filter = "AND f.project_code = %s"
     order_params = (*order_params, selected_project)
-    if selected_order != "Todas":
-        order_filter += " AND f.order_number = %s"
-        order_params = (*order_params, selected_order)
 
 orders = query(
     f"""
@@ -307,11 +285,7 @@ if selected_project != "Todos":
     of_deviation = of_incurred - of_granted
     of_consumption = (of_incurred / of_granted) if of_granted else None
 
-    st.subheader(
-        "RESUMEN ORDEN DE FABRICACIÓN"
-        if selected_order == "Todas"
-        else f"RESUMEN OF {selected_order}"
-    )
+    st.subheader("RESUMEN ORDEN DE FABRICACIÓN")
     of1, of2 = st.columns(2)
     of1.metric("Horas concedidas", f"{of_granted:,.1f} h")
     of2.metric("Consumo", "—" if of_consumption is None else f"{of_consumption:.1%}")
@@ -405,6 +379,16 @@ if selected_project != "Todos":
         },
     )
 
+    all_orders = ["Todas"] + orders["order_number"].dropna().astype(str).drop_duplicates().tolist()
+    selected_order = st.selectbox(
+        "OF · Orden de Fabricación",
+        all_orders,
+        key="order_filter",
+        help="Selecciona una Orden de Fabricación para desplegar sus bonos de trabajo.",
+    )
+else:
+    selected_order = "Todas"
+
 if selected_project != "Todos" and selected_order != "Todas":
     st.divider()
     bonuses = query(
@@ -434,8 +418,18 @@ if selected_project != "Todos" and selected_order != "Todas":
     )
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
-    bonus_granted = float(bonuses["hours_granted"].sum())
-    bonus_incurred = float(bonuses["hours_incurred"].sum())
+    all_bonuses = ["Todos"] + bonuses["bonus_id"].dropna().astype(str).drop_duplicates().tolist()
+    selected_bonus = st.session_state.get("bonus_filter", "Todos")
+    if selected_bonus not in all_bonuses:
+        selected_bonus = "Todos"
+        st.session_state["bonus_filter"] = "Todos"
+
+    displayed_bonuses = bonuses
+    if selected_bonus != "Todos":
+        displayed_bonuses = bonuses[bonuses["bonus_id"].astype(str) == selected_bonus]
+
+    bonus_granted = float(displayed_bonuses["hours_granted"].sum())
+    bonus_incurred = float(displayed_bonuses["hours_incurred"].sum())
     bonus_deviation = bonus_incurred - bonus_granted
     bonus_consumption = (bonus_incurred / bonus_granted) if bonus_granted else None
 
@@ -445,7 +439,7 @@ if selected_project != "Todos" and selected_order != "Todas":
     b2.metric("Consumo", "—" if bonus_consumption is None else f"{bonus_consumption:.1%}")
 
     bonus_chart = (
-        bonuses[["bonus_id", "hours_granted", "hours_incurred"]]
+        displayed_bonuses[["bonus_id", "hours_granted", "hours_incurred"]]
         .groupby("bonus_id", as_index=False)[["hours_granted", "hours_incurred"]]
         .sum()
     )
@@ -484,7 +478,7 @@ if selected_project != "Todos" and selected_order != "Todas":
 
         xaxis_title="Horas",
         legend_title_text=None,
-        height=max(260, min(700, 22 * max(len(bonuses), 1) + 100)),
+        height=max(260, min(700, 22 * max(len(displayed_bonuses), 1) + 100)),
         bargap=0.12,
         bargroupgap=0.03,
         margin=dict(l=10, r=10, t=20, b=10),
@@ -516,7 +510,7 @@ if selected_project != "Todos" and selected_order != "Todas":
     )
 
     st.dataframe(
-        bonuses[
+        displayed_bonuses[
             [
                 "bonus_id", "operation_description", "consumption_pct",
                 "hours_granted", "hours_incurred", "deviation_hours",
@@ -533,3 +527,11 @@ if selected_project != "Todos" and selected_order != "Todas":
             )
         },
     )
+
+    if len(all_bonuses) > 2:
+        st.selectbox(
+            "Bono de trabajo",
+            all_bonuses,
+            key="bonus_filter",
+            help="Selecciona un bono concreto dentro de la OF.",
+        )
