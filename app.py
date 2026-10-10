@@ -372,6 +372,18 @@ if selected_project != "Todos" and selected_order != "Todas":
     )
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
+    bonus_granted = float(bonuses["hours_granted"].sum())
+    bonus_incurred = float(bonuses["hours_incurred"].sum())
+    bonus_deviation = bonus_incurred - bonus_granted
+    bonus_consumption = (bonus_incurred / bonus_granted) if bonus_granted else None
+
+    st.subheader(f"RESUMEN BONOS OF {selected_order}")
+    b1, b2, b3, b4 = st.columns(4)
+    b1.metric("Horas concedidas", f"{bonus_granted:,.1f} h")
+    b2.metric("Horas incurridas", f"{bonus_incurred:,.1f} h")
+    b3.metric("Desviación", f"{bonus_deviation:+,.1f} h")
+    b4.metric("Consumo", "—" if bonus_consumption is None else f"{bonus_consumption:.1%}")
+
     st.subheader("Gráfica Concedidas vs. incurridas por Bono de trabajo")
     bonus_chart = (
         bonuses[["bonus_id", "hours_granted", "hours_incurred"]]
