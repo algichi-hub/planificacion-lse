@@ -33,7 +33,78 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-st.title("Cuadro de mando Planificación")
+view = str(st.query_params.get("view", "home")).lower()
+if view not in {"home", "risks"}:
+    view = "home"
+
+st.title(
+    "Cuadro de mando Planificación"
+    if view == "home"
+    else "Análisis de riesgos"
+)
+
+home_active = "active" if view == "home" else ""
+risks_active = "active" if view == "risks" else ""
+st.markdown(
+    f"""
+    <style>
+    .block-container {{
+        padding-bottom: 6.2rem;
+    }}
+    .bottom-nav {{
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
+        display: flex;
+        justify-content: center;
+        gap: 4.5rem;
+        padding: 0.65rem 1rem calc(0.65rem + env(safe-area-inset-bottom));
+        background: var(--secondary-background-color);
+        border-top: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+    }}
+    .bottom-nav a {{
+        min-width: 4.5rem;
+        min-height: 2.8rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.12rem;
+        color: var(--text-color);
+        text-decoration: none;
+        font-size: 0.72rem;
+        opacity: 0.68;
+    }}
+    .bottom-nav a .icon {{
+        font-size: 1.35rem;
+        line-height: 1;
+    }}
+    .bottom-nav a.active {{
+        color: var(--primary-color);
+        opacity: 1;
+        font-weight: 700;
+    }}
+    @media (max-width: 768px) {{
+        .bottom-nav {{
+            gap: 6rem;
+        }}
+    }}
+    </style>
+    <nav class="bottom-nav" aria-label="Navegación principal">
+        <a href="?view=home" class="{home_active}">
+            <span class="icon">⌂</span>
+            <span>Home</span>
+        </a>
+        <a href="?view=risks" class="{risks_active}">
+            <span class="icon">⚠</span>
+            <span>Riesgos</span>
+        </a>
+    </nav>
+    """,
+    unsafe_allow_html=True,
+)
 
 if not DATABASE_URL:
     st.error(
@@ -135,6 +206,197 @@ if not selected_managers:
     st.stop()
 
 manager_placeholders = ",".join(["%s"] * len(selected_managers))
+
+if view == "risks":
+    risk_bonuses = query(
+        f"""
+        SELECT
+            f.project_code,
+            COALESCE(MAX(p.description), MAX(f.project_code)) AS project_description,
+            MAX(p.project_manager) AS project_manager,
+            f.order_number,
+            MAX(f.order_description) AS order_description,
+            f.bonus_id,
+            MAX(f.operation_description) AS operation_description,
+            SUM(f.hours_granted) AS hours_granted,
+            SUM(f.hours_incurred) AS hours_incurred,
+            SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
+            CASE
+                WHEN SUM(f.hours_granted) = 0 THEN NULL
+                ELSE SUM(f.hours_incurred) / SUM(f.hours_granted)
+            END AS consumption_ratio
+        FROM fact_hours f
+        LEFT JOIN projects p ON p.project_code = f.project_code
+        WHERE f.snapshot_date = %s
+          AND f.work_center IN ({center_placeholders})
+          AND p.project_manager IN ({manager_placeholders})
+          AND f.bonus_id IS NOT NULL
+        GROUP BY f.project_code, f.order_number, f.bonus_id
+        HAVING SUM(f.hours_granted) <> 0 OR SUM(f.hours_incurred) <> 0
+        """,
+        (snapshot, *selected_centers, *selected_managers),
+    )
+
+    if risk_bonuses.empty:
+        st.info("No hay bonos con horas concedidas o incurridas para los filtros actuales.")
+        st.stop()
+
+    risk_bonuses["consumption_pct"] = risk_bonuses["consumption_ratio"] * 100
+
+    def classify_risk(row):
+        granted = float(row["hours_granted"] or 0)
+        incurred = float(row["hours_incurred"] or 0)
+        pct = row["consumption_pct"]
+
+        if granted <= 0 and incurred > 0:
+            return "Crítico >110%"
+        if pd.isna(pct):
+            return "Normal <90%"
+        if pct > 110:
+            return "Crítico >110%"
+        if pct >= 100:
+            return "Alto 100–110%"
+        if pct >= 90:
+            return "Vigilancia 90–100%"
+        return "Normal <90%"
+
+    risk_bonuses["risk_level"] = risk_bonuses.apply(classify_risk, axis=1)
+    risk_bonuses["risk_order"] = risk_bonuses["risk_level"].map({
+        "Crítico >110%": 0,
+        "Alto 100–110%": 1,
+        "Vigilancia 90–100%": 2,
+        "Normal <90%": 3,
+    })
+
+    # Prioridad por delta de horas, no por porcentaje.
+    risk_bonuses = risk_bonuses.sort_values(
+        ["deviation_hours", "risk_order", "project_code", "order_number", "bonus_id"],
+        ascending=[False, True, True, True, True],
+    ).reset_index(drop=True)
+
+    st.caption(
+        "Priorización por Δ horas = horas incurridas − horas concedidas. "
+        "El porcentaje se usa únicamente para clasificar el nivel de riesgo."
+    )
+
+    risk_labels = [
+        "Crítico >110%",
+        "Alto 100–110%",
+        "Vigilancia 90–100%",
+        "Normal <90%",
+    ]
+    risk_cols = st.columns(4)
+    for col, label in zip(risk_cols, risk_labels):
+        bucket = risk_bonuses[risk_bonuses["risk_level"] == label]
+        delta_sum = float(bucket["deviation_hours"].sum()) if not bucket.empty else 0.0
+        col.metric(
+            label,
+            f"{len(bucket):,} bonos",
+            delta=f"{delta_sum:+,.1f} h Δ",
+            delta_color="inverse",
+        )
+
+    st.divider()
+    st.subheader("OF PRIORIZADAS POR DELTA DE HORAS")
+
+    of_risk = (
+        risk_bonuses.groupby(
+            ["project_code", "project_description", "project_manager", "order_number", "order_description"],
+            as_index=False,
+        )
+        .agg(
+            hours_granted=("hours_granted", "sum"),
+            hours_incurred=("hours_incurred", "sum"),
+            deviation_hours=("deviation_hours", "sum"),
+            bonus_count=("bonus_id", "nunique"),
+            critical_count=("risk_level", lambda s: (s == "Crítico >110%").sum()),
+            high_count=("risk_level", lambda s: (s == "Alto 100–110%").sum()),
+            watch_count=("risk_level", lambda s: (s == "Vigilancia 90–100%").sum()),
+            normal_count=("risk_level", lambda s: (s == "Normal <90%").sum()),
+        )
+    )
+    of_risk["consumption_pct"] = (
+        of_risk["hours_incurred"] / of_risk["hours_granted"].replace(0, pd.NA) * 100
+    )
+    of_risk = of_risk.sort_values(
+        ["deviation_hours", "critical_count", "high_count"],
+        ascending=[False, False, False],
+    )
+
+    st.dataframe(
+        of_risk[
+            [
+                "project_code", "order_number", "order_description",
+                "deviation_hours", "consumption_pct", "critical_count",
+                "high_count", "watch_count", "normal_count", "bonus_count"
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "project_code": st.column_config.TextColumn("Proyecto"),
+            "order_number": st.column_config.TextColumn("OF"),
+            "order_description": st.column_config.TextColumn("Descripción"),
+            "deviation_hours": st.column_config.NumberColumn("Δ horas", format="%+.1f h"),
+            "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
+            "critical_count": st.column_config.NumberColumn(">110 %"),
+            "high_count": st.column_config.NumberColumn("100–110 %"),
+            "watch_count": st.column_config.NumberColumn("90–100 %"),
+            "normal_count": st.column_config.NumberColumn("<90 %"),
+            "bonus_count": st.column_config.NumberColumn("Bonos"),
+        },
+    )
+
+    st.divider()
+    st.subheader("BONOS PRIORIZADOS POR DELTA DE HORAS")
+
+    filter_col1, filter_col2 = st.columns(2)
+    selected_risk = filter_col1.selectbox(
+        "Nivel de riesgo",
+        ["Todos"] + risk_labels,
+        key="risk_level_filter",
+    )
+    risk_orders = ["Todas"] + of_risk["order_number"].dropna().astype(str).drop_duplicates().tolist()
+    selected_risk_order = filter_col2.selectbox(
+        "Orden de Fabricación",
+        risk_orders,
+        key="risk_order_filter",
+    )
+
+    displayed_risk = risk_bonuses.copy()
+    if selected_risk != "Todos":
+        displayed_risk = displayed_risk[displayed_risk["risk_level"] == selected_risk]
+    if selected_risk_order != "Todas":
+        displayed_risk = displayed_risk[
+            displayed_risk["order_number"].astype(str) == selected_risk_order
+        ]
+
+    st.dataframe(
+        displayed_risk[
+            [
+                "risk_level", "project_code", "order_number", "bonus_id",
+                "operation_description", "hours_granted", "hours_incurred",
+                "deviation_hours", "consumption_pct", "project_manager"
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "risk_level": st.column_config.TextColumn("Riesgo"),
+            "project_code": st.column_config.TextColumn("Proyecto"),
+            "order_number": st.column_config.TextColumn("OF"),
+            "bonus_id": st.column_config.TextColumn("Bono"),
+            "operation_description": st.column_config.TextColumn("Descripción"),
+            "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
+            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
+            "deviation_hours": st.column_config.NumberColumn("Δ horas", format="%+.1f h"),
+            "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
+            "project_manager": st.column_config.TextColumn("Owner"),
+        },
+    )
+
+    st.stop()
+
 projects = query(
     f"""
     SELECT
