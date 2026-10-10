@@ -252,8 +252,12 @@ orders = query(
 
 if selected_project != "Todos":
     st.subheader("Concedidas vs. incurridas por Orden de Fabricación")
-    order_chart = orders[["order_number", "hours_granted", "hours_incurred"]].copy()
-    order_chart["order_number"] = order_chart["order_number"].astype(str)
+    order_chart = (
+        orders[["order_number", "hours_granted", "hours_incurred"]]
+        .groupby("order_number", as_index=False)[["hours_granted", "hours_incurred"]]
+        .sum()
+    )
+    order_chart["order_number"] = order_chart["order_number"].astype("string")
     order_chart = order_chart.melt(
         id_vars="order_number",
         value_vars=["hours_granted", "hours_incurred"],
@@ -278,7 +282,9 @@ if selected_project != "Todos":
         labels={"order_number": "OF"},
     )
     fig_orders.update_layout(
-        yaxis_title=None,
+        yaxis=dict(type="category", title=None, categoryorder="array",
+                   categoryarray=order_chart["order_number"].drop_duplicates().tolist()),
+
         xaxis_title="Horas",
         legend_title_text=None,
         height=max(320, min(900, 32 * max(len(orders), 1) + 120)),
@@ -329,8 +335,12 @@ if selected_project != "Todos" and selected_order != "Todas":
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
     st.subheader("Concedidas vs. incurridas por Bono de trabajo")
-    bonus_chart = bonuses[["bonus_id", "hours_granted", "hours_incurred"]].copy()
-    bonus_chart["bonus_id"] = bonus_chart["bonus_id"].astype(str)
+    bonus_chart = (
+        bonuses[["bonus_id", "hours_granted", "hours_incurred"]]
+        .groupby("bonus_id", as_index=False)[["hours_granted", "hours_incurred"]]
+        .sum()
+    )
+    bonus_chart["bonus_id"] = bonus_chart["bonus_id"].astype("string")
     bonus_chart = bonus_chart.melt(
         id_vars="bonus_id",
         value_vars=["hours_granted", "hours_incurred"],
@@ -355,7 +365,9 @@ if selected_project != "Todos" and selected_order != "Todas":
         labels={"bonus_id": "Bono"},
     )
     fig_bonuses.update_layout(
-        yaxis_title=None,
+        yaxis=dict(type="category", title=None, categoryorder="array",
+                   categoryarray=bonus_chart["bonus_id"].drop_duplicates().tolist()),
+
         xaxis_title="Horas",
         legend_title_text=None,
         height=max(320, min(900, 32 * max(len(bonuses), 1) + 120)),
