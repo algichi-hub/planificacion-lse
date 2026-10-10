@@ -146,6 +146,24 @@ projects = query(
 all_projects = ["Todos"] + projects["project_code"].dropna().astype(str).tolist()
 selected_project = st.sidebar.selectbox("Project · Proyecto", all_projects)
 
+selected_order = "Todas"
+if selected_project != "Todos":
+    order_options_df = query(
+        f"""
+        SELECT DISTINCT f.order_number
+        FROM fact_hours f
+        LEFT JOIN projects p ON p.project_code = f.project_code
+        WHERE f.snapshot_date = %s
+          AND f.work_center IN ({center_placeholders})
+          AND p.project_manager IN ({manager_placeholders})
+          AND f.project_code = %s
+        ORDER BY f.order_number
+        """,
+        (snapshot, *selected_centers, *selected_managers, selected_project),
+    )
+    all_orders = ["Todas"] + order_options_df["order_number"].dropna().astype(str).tolist()
+    selected_order = st.sidebar.selectbox("OF · Orden de Fabricación", all_orders)
+
 filtered_projects = projects
 if selected_project != "Todos":
     filtered_projects = projects[projects["project_code"].astype(str) == selected_project]
@@ -203,6 +221,9 @@ order_filter = ""
 if selected_project != "Todos":
     order_filter = "AND f.project_code = %s"
     order_params = (*order_params, selected_project)
+    if selected_order != "Todas":
+        order_filter += " AND f.order_number = %s"
+        order_params = (*order_params, selected_order)
 
 orders = query(
     f"""
@@ -243,7 +264,7 @@ st.dataframe(
     hide_index=True,
 )
 
-if selected_project != "Todos":
+if selected_project != "Todos" and selected_order != "Todas":
     bonuses = query(
         f"""
         SELECT
@@ -263,10 +284,11 @@ if selected_project != "Todos":
           AND f.work_center IN ({center_placeholders})
           AND p.project_manager IN ({manager_placeholders})
           AND f.project_code = %s
+          AND f.order_number = %s
         GROUP BY f.order_number, f.operation_number, f.bonus_id
-        ORDER BY deviation_hours DESC, f.order_number, f.operation_number
+        ORDER BY f.operation_number, f.bonus_id
         """,
-        (snapshot, *selected_centers, *selected_managers, selected_project),
+        (snapshot, *selected_centers, *selected_managers, selected_project, selected_order),
     )
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
@@ -274,8 +296,7 @@ if selected_project != "Todos":
     st.dataframe(
         bonuses[
             [
-                "order_number", "operation_number", "bonus_id",
-                "operation_description", "hours_granted", "hours_incurred",
+                "bonus_id", "operation_description", "hours_granted", "hours_incurred",
                 "deviation_hours", "remaining_hours", "consumption_pct"
             ]
         ],
