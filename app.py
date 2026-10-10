@@ -118,7 +118,7 @@ bottom_nav = st.components.v2.component(
         font-feature-settings: "liga";
     }
     .bottom-nav a.active {
-        color: var(--st-primary-color);
+        color: #2563EB;
         opacity: 1;
         font-weight: 700;
     }
