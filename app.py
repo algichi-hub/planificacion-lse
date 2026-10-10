@@ -318,8 +318,9 @@ fig.update_layout(
     paper_bgcolor=plot_bg,
     plot_bgcolor=plot_bg,
     font_color=text_color,
-    xaxis=dict(gridcolor=grid_color),
-    yaxis=dict(gridcolor=grid_color),
+    xaxis=dict(gridcolor=grid_color, fixedrange=True),
+    yaxis=dict(gridcolor=grid_color, fixedrange=True),
+    dragmode=False,
     legend=dict(
         orientation="h",
         yanchor="bottom",
@@ -442,8 +443,13 @@ if selected_project != "Todos":
         labels={"order_number": "OF"},
     )
     fig_orders.update_layout(
-        yaxis=dict(type="category", title=None, categoryorder="array",
-                   categoryarray=order_chart["order_number"].drop_duplicates().tolist()),
+        yaxis=dict(
+            type="category",
+            title=None,
+            categoryorder="array",
+            categoryarray=order_chart["order_number"].drop_duplicates().tolist(),
+            fixedrange=True,
+        ),
 
         xaxis_title="Horas",
         legend_title_text=None,
@@ -455,7 +461,9 @@ if selected_project != "Todos":
         paper_bgcolor=plot_bg,
         plot_bgcolor=plot_bg,
         font_color=text_color,
-        xaxis=dict(gridcolor=grid_color),
+        xaxis=dict(gridcolor=grid_color, fixedrange=True),
+        yaxis_fixedrange=True,
+        dragmode=False,
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -566,8 +574,13 @@ if selected_project != "Todos" and selected_order != "Todas":
         labels={"bonus_id": "Bono"},
     )
     fig_bonuses.update_layout(
-        yaxis=dict(type="category", title=None, categoryorder="array",
-                   categoryarray=bonus_chart["bonus_id"].drop_duplicates().tolist()),
+        yaxis=dict(
+            type="category",
+            title=None,
+            categoryorder="array",
+            categoryarray=bonus_chart["bonus_id"].drop_duplicates().tolist(),
+            fixedrange=True,
+        ),
 
         xaxis_title="Horas",
         legend_title_text=None,
@@ -581,7 +594,9 @@ if selected_project != "Todos" and selected_order != "Todas":
         paper_bgcolor=plot_bg,
         plot_bgcolor=plot_bg,
         font_color=text_color,
-        xaxis=dict(gridcolor=grid_color),
+        xaxis=dict(gridcolor=grid_color, fixedrange=True),
+        yaxis_fixedrange=True,
+        dragmode=False,
         legend=dict(
             orientation="h",
             yanchor="bottom",
