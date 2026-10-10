@@ -246,6 +246,34 @@ if not selected_managers:
 
 manager_placeholders = ",".join(["%s"] * len(selected_managers))
 
+project_statuses = query(
+    f"""
+    SELECT DISTINCT p.status
+    FROM fact_hours f
+    LEFT JOIN projects p ON p.project_code = f.project_code
+    WHERE f.snapshot_date = %s
+      AND f.work_center IN ({center_placeholders})
+      AND p.project_manager IN ({manager_placeholders})
+      AND p.status IS NOT NULL
+      AND TRIM(p.status) <> ''
+    ORDER BY p.status
+    """,
+    (snapshot, *selected_centers, *selected_managers),
+)
+available_statuses = project_statuses["status"].astype(str).tolist()
+selected_statuses = st.sidebar.multiselect(
+    "Estado del proyecto",
+    available_statuses,
+    default=available_statuses,
+    help="Filtra por uno o varios estados del proyecto. Por defecto se incluyen todos.",
+)
+
+if not selected_statuses:
+    st.warning("Selecciona al menos un estado del proyecto para visualizar datos.")
+    st.stop()
+
+status_placeholders = ",".join(["%s"] * len(selected_statuses))
+
 if view == "risks":
     risk_bonuses = query(
         f"""
@@ -269,11 +297,12 @@ if view == "risks":
         WHERE f.snapshot_date = %s
           AND f.work_center IN ({center_placeholders})
           AND p.project_manager IN ({manager_placeholders})
+          AND p.status IN ({status_placeholders})
           AND f.bonus_id IS NOT NULL
         GROUP BY f.project_code, f.order_number, f.bonus_id
         HAVING SUM(f.hours_granted) <> 0 OR SUM(f.hours_incurred) <> 0
         """,
-        (snapshot, *selected_centers, *selected_managers),
+        (snapshot, *selected_centers, *selected_managers, *selected_statuses),
     )
 
     if risk_bonuses.empty:
@@ -455,10 +484,11 @@ projects = query(
     WHERE f.snapshot_date = %s
       AND f.work_center IN ({center_placeholders})
       AND p.project_manager IN ({manager_placeholders})
+      AND p.status IN ({status_placeholders})
     GROUP BY f.project_code
     ORDER BY deviation_hours DESC, f.project_code
     """,
-    (snapshot, *selected_centers, *selected_managers),
+    (snapshot, *selected_centers, *selected_managers, *selected_statuses),
 )
 
 all_projects = ["Todos"] + projects["project_code"].dropna().astype(str).tolist()
@@ -548,7 +578,7 @@ selected_project = st.selectbox(
     help="Selecciona un proyecto para desplegar sus Órdenes de Fabricación.",
 )
 
-order_params = (snapshot, *selected_centers, *selected_managers)
+order_params = (snapshot, *selected_centers, *selected_managers, *selected_statuses)
 order_filter = ""
 if selected_project != "Todos":
     order_filter = "AND f.project_code = %s"
@@ -572,6 +602,7 @@ orders = query(
     WHERE f.snapshot_date = %s
       AND f.work_center IN ({center_placeholders})
       AND p.project_manager IN ({manager_placeholders})
+      AND p.status IN ({status_placeholders})
       {order_filter}
     GROUP BY f.project_code, f.order_number
     ORDER BY deviation_hours DESC, f.order_number
@@ -710,12 +741,13 @@ if selected_project != "Todos" and selected_order != "Todas":
         WHERE f.snapshot_date = %s
           AND f.work_center IN ({center_placeholders})
           AND p.project_manager IN ({manager_placeholders})
+          AND p.status IN ({status_placeholders})
           AND f.project_code = %s
           AND f.order_number = %s
         GROUP BY f.order_number, f.operation_number, f.bonus_id
         ORDER BY f.operation_number, f.bonus_id
         """,
-        (snapshot, *selected_centers, *selected_managers, selected_project, selected_order),
+        (snapshot, *selected_centers, *selected_managers, *selected_statuses, selected_project, selected_order),
     )
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
