@@ -207,9 +207,9 @@ project_table["consumption_pct"] = project_table["consumption_ratio"] * 100
 st.dataframe(
     project_table[
         [
-            "project_code", "project_description", "project_manager",
+            "project_code", "project_description", "consumption_pct", "project_manager",
             "hours_granted", "hours_incurred", "deviation_hours",
-            "remaining_hours", "consumption_pct"
+            "remaining_hours"
         ]
     ],
     use_container_width=True,
@@ -393,8 +393,9 @@ if selected_project != "Todos" and selected_order != "Todas":
     st.dataframe(
         bonuses[
             [
-                "bonus_id", "operation_description", "hours_granted", "hours_incurred",
-                "deviation_hours", "remaining_hours", "consumption_pct"
+                "bonus_id", "operation_description", "consumption_pct",
+                "hours_granted", "hours_incurred", "deviation_hours",
+                "remaining_hours"
             ]
         ],
         use_container_width=True,
