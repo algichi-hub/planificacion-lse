@@ -323,13 +323,13 @@ fig.update_layout(
     yaxis=dict(gridcolor=grid_color),
     legend=dict(
         orientation="h",
-        yanchor="top",
-        y=-0.18,
+        yanchor="bottom",
+        y=1.02,
         xanchor="center",
         x=0.5,
         title=None,
     ),
-    margin=dict(l=10, r=10, t=20, b=80),
+    margin=dict(l=10, r=10, t=70, b=20),
 )
 st.plotly_chart(fig, use_container_width=True)
 
@@ -452,13 +452,13 @@ if selected_project != "Todos":
         xaxis=dict(gridcolor=grid_color),
         legend=dict(
             orientation="h",
-            yanchor="top",
-            y=-0.12,
+            yanchor="bottom",
+            y=1.02,
             xanchor="center",
             x=0.5,
             title=None,
         ),
-        margin=dict(l=10, r=10, t=20, b=70),
+        margin=dict(l=10, r=10, t=70, b=20),
     )
     st.plotly_chart(fig_orders, use_container_width=True)
 
@@ -571,13 +571,13 @@ if selected_project != "Todos" and selected_order != "Todas":
         xaxis=dict(gridcolor=grid_color),
         legend=dict(
             orientation="h",
-            yanchor="top",
-            y=-0.12,
+            yanchor="bottom",
+            y=1.02,
             xanchor="center",
             x=0.5,
             title=None,
         ),
-        margin=dict(l=10, r=10, t=20, b=70),
+        margin=dict(l=10, r=10, t=70, b=20),
     )
     st.plotly_chart(fig_bonuses, use_container_width=True)
 
