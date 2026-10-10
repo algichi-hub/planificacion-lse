@@ -173,6 +173,7 @@ incurred = float(filtered_projects["hours_incurred"].sum())
 deviation = incurred - granted
 consumption = (incurred / granted) if granted else None
 
+st.divider()
 st.subheader(
     "RESUMEN PROYECTO"
     if selected_project == "Todos"
@@ -263,6 +264,7 @@ orders = query(
 )
 
 if selected_project != "Todos":
+    st.divider()
     of_granted = float(orders["hours_granted"].sum())
     of_incurred = float(orders["hours_incurred"].sum())
     of_deviation = of_incurred - of_granted
@@ -342,6 +344,7 @@ if selected_project != "Todos":
     )
 
 if selected_project != "Todos" and selected_order != "Todas":
+    st.divider()
     bonuses = query(
         f"""
         SELECT
