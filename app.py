@@ -46,15 +46,6 @@ st.title(
 home_active = "active" if view == "home" else ""
 risks_active = "active" if view == "risks" else ""
 
-try:
-    active_theme = st.context.theme.type
-except Exception:
-    active_theme = "light"
-
-nav_bg = "#161B22" if active_theme == "dark" else "#FFFFFF"
-nav_border = "#30363D" if active_theme == "dark" else "#E5E7EB"
-nav_shadow = "rgba(0, 0, 0, 0.35)" if active_theme == "dark" else "rgba(17, 24, 39, 0.14)"
-
 st.markdown(
     f"""
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet">
@@ -72,13 +63,13 @@ st.markdown(
         justify-content: flex-start;
         gap: 2.75rem;
         padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom));
-        background-color: {nav_bg} !important;
-        background-image: linear-gradient({nav_bg}, {nav_bg}) !important;
+        background-color: var(--st-secondary-background-color) !important;
+        background-image: none !important;
         opacity: 1 !important;
         backdrop-filter: none !important;
         -webkit-backdrop-filter: none !important;
-        border-top: 1px solid {nav_border};
-        box-shadow: 0 -4px 16px {nav_shadow};
+        border-top: 1px solid var(--st-border-color);
+        box-shadow: 0 -4px 16px color-mix(in srgb, var(--st-text-color) 12%, transparent);
     }}
     .bottom-nav a {{
         min-width: 4.5rem;
@@ -88,7 +79,7 @@ st.markdown(
         align-items: center;
         justify-content: center;
         gap: 0.12rem;
-        color: var(--text-color);
+        color: var(--st-text-color);
         text-decoration: none;
         font-size: 0.72rem;
         opacity: 0.68;
@@ -110,7 +101,7 @@ st.markdown(
         font-feature-settings: "liga";
     }}
     .bottom-nav a.active {{
-        color: var(--primary-color);
+        color: var(--st-primary-color);
         opacity: 1;
         font-weight: 700;
     }}
