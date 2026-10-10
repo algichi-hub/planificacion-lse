@@ -51,7 +51,13 @@ def query(sql: str, params=()) -> pd.DataFrame:
 
 
 try:
-    latest = query("SELECT snapshot_date FROM v_latest_snapshot")
+    snapshots = query(
+        """
+        SELECT DISTINCT snapshot_date
+        FROM fact_hours
+        ORDER BY snapshot_date DESC
+        """
+    )
 except psycopg.Error:
     st.error(
         "No se ha podido conectar con PostgreSQL/Neon o el esquema todavía no existe. "
@@ -59,11 +65,22 @@ except psycopg.Error:
     )
     st.stop()
 
-if latest.empty or pd.isna(latest.iloc[0]["snapshot_date"]):
+if snapshots.empty:
     st.info("La base de datos todavía no contiene ningún snapshot.")
     st.stop()
 
-snapshot = latest.iloc[0]["snapshot_date"]
+snapshot_options = [
+    pd.Timestamp(value).date()
+    for value in snapshots["snapshot_date"].dropna().tolist()
+]
+st.sidebar.markdown("### Filtros jerárquicos")
+snapshot = st.sidebar.selectbox(
+    "Snapshot",
+    snapshot_options,
+    index=0,
+    format_func=lambda value: value.strftime("%Y-%m-%d"),
+    help="Selecciona la fecha del snapshot que quieres analizar.",
+)
 st.caption(f"Snapshot activo: {snapshot}")
 
 work_centers = query(
@@ -78,7 +95,6 @@ work_centers = query(
 )
 available_centers = work_centers["work_center"].astype(str).tolist()
 default_centers = ["422"] if "422" in available_centers else available_centers
-st.sidebar.markdown("### Filtros jerárquicos")
 selected_centers = st.sidebar.multiselect(
     "Centro (Ct.)",
     available_centers,
