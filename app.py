@@ -331,7 +331,16 @@ fig.update_layout(
     ),
     margin=dict(l=10, r=10, t=70, b=20),
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={
+        "displayModeBar": false,
+        "scrollZoom": false,
+        "doubleClick": false,
+        "showTips": false,
+    },
+)
 
 st.subheader("Tabla Concedidas vs. incurridas por Proyecto")
 project_table = filtered_projects.copy()
@@ -460,7 +469,16 @@ if selected_project != "Todos":
         ),
         margin=dict(l=10, r=10, t=70, b=20),
     )
-    st.plotly_chart(fig_orders, use_container_width=True)
+    st.plotly_chart(
+        fig_orders,
+        use_container_width=True,
+        config={
+            "displayModeBar": false,
+            "scrollZoom": false,
+            "doubleClick": false,
+            "showTips": false,
+        },
+    )
 
     st.subheader("Tabla Concedidas vs. incurridas por Orden de Fabricación")
     orders["consumption_pct"] = orders["consumption_ratio"] * 100
@@ -579,7 +597,16 @@ if selected_project != "Todos" and selected_order != "Todas":
         ),
         margin=dict(l=10, r=10, t=70, b=20),
     )
-    st.plotly_chart(fig_bonuses, use_container_width=True)
+    st.plotly_chart(
+        fig_bonuses,
+        use_container_width=True,
+        config={
+            "displayModeBar": false,
+            "scrollZoom": false,
+            "doubleClick": false,
+            "showTips": false,
+        },
+    )
 
     st.subheader("Tabla Concedidas vs. incurridas por Bono de trabajo")
     st.dataframe(
