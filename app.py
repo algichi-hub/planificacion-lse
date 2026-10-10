@@ -89,6 +89,9 @@ if theme_mode == "Claro":
     muted_color = "#4B5563"
     border_color = "#E5E7EB"
     control_bg = "#FFFFFF"
+    panel_bg = "#FFFFFF"
+    plot_bg = "#FFFFFF"
+    grid_color = "#E5E7EB"
     plotly_template = "plotly_white"
 else:
     app_bg = "#0E1117"
@@ -97,6 +100,9 @@ else:
     muted_color = "#B8C0CC"
     border_color = "#30363D"
     control_bg = "#0E1117"
+    panel_bg = "#161B22"
+    plot_bg = "#0E1117"
+    grid_color = "#30363D"
     plotly_template = "plotly_dark"
 
 px.defaults.template = plotly_template
@@ -130,13 +136,29 @@ st.markdown(
     [data-testid="stCaptionContainer"] {{
         color: {muted_color};
     }}
-    div[data-baseweb="select"] > div {{
-        background-color: {control_bg};
-        border-color: {border_color};
-        color: {text_color};
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="base-input"],
+    div[role="listbox"],
+    ul[role="listbox"] {{
+        background-color: {control_bg} !important;
+        border-color: {border_color} !important;
+        color: {text_color} !important;
     }}
-    [data-testid="stMetric"] {{
-        border-color: {border_color};
+    [data-testid="stMetric"],
+    [data-testid="stDataFrame"],
+    [data-testid="stTable"],
+    [data-testid="stPlotlyChart"] {{
+        background-color: {panel_bg} !important;
+        border-color: {border_color} !important;
+    }}
+    [data-testid="stDataFrame"] > div,
+    [data-testid="stTable"] > div,
+    [data-testid="stPlotlyChart"] > div {{
+        background-color: {panel_bg} !important;
+    }}
+    [data-testid="stDataFrame"] canvas {{
+        background-color: {panel_bg} !important;
     }}
     hr {{
         border-color: {border_color};
@@ -294,6 +316,14 @@ fig = px.bar(
     barmode="group",
     labels={"project_code": "Proyecto"},
 )
+fig.update_layout(
+    template=plotly_template,
+    paper_bgcolor=plot_bg,
+    plot_bgcolor=plot_bg,
+    font_color=text_color,
+    xaxis=dict(gridcolor=grid_color),
+    yaxis=dict(gridcolor=grid_color),
+)
 st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("Tabla Concedidas vs. incurridas por Proyecto")
@@ -409,6 +439,13 @@ if selected_project != "Todos":
         height=max(320, min(900, 32 * max(len(orders), 1) + 120)),
         margin=dict(l=10, r=10, t=30, b=10),
     )
+    fig_orders.update_layout(
+        template=plotly_template,
+        paper_bgcolor=plot_bg,
+        plot_bgcolor=plot_bg,
+        font_color=text_color,
+        xaxis=dict(gridcolor=grid_color),
+    )
     st.plotly_chart(fig_orders, use_container_width=True)
 
     st.subheader("Tabla Concedidas vs. incurridas por Orden de Fabricación")
@@ -513,6 +550,13 @@ if selected_project != "Todos" and selected_order != "Todas":
         bargap=0.12,
         bargroupgap=0.03,
         margin=dict(l=10, r=10, t=20, b=10),
+    )
+    fig_bonuses.update_layout(
+        template=plotly_template,
+        paper_bgcolor=plot_bg,
+        plot_bgcolor=plot_bg,
+        font_color=text_color,
+        xaxis=dict(gridcolor=grid_color),
     )
     st.plotly_chart(fig_bonuses, use_container_width=True)
 
