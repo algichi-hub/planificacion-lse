@@ -303,9 +303,9 @@ if selected_project != "Todos":
     st.dataframe(
         orders[
             [
-                "project_code", "order_number", "order_description", "order_status",
-                "hours_granted", "hours_incurred", "deviation_hours",
-                "remaining_hours", "consumption_pct"
+                "project_code", "order_number", "order_description", "consumption_pct",
+                "order_status", "hours_granted", "hours_incurred",
+                "deviation_hours", "remaining_hours"
             ]
         ],
         use_container_width=True,
