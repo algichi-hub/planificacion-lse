@@ -294,7 +294,6 @@ c1, c2 = st.columns(2)
 c1.metric("Horas concedidas", f"{granted:,.1f} h")
 c2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
 
-st.subheader("Gráfica Concedidas vs. incurridas por Proyecto")
 chart_df = filtered_projects[["project_code", "hours_granted", "hours_incurred"]].copy()
 chart_df = chart_df.melt(
     id_vars="project_code",
@@ -342,7 +341,6 @@ st.plotly_chart(
     },
 )
 
-st.subheader("Tabla Concedidas vs. incurridas por Proyecto")
 project_table = filtered_projects.copy()
 project_table["consumption_pct"] = project_table["consumption_ratio"] * 100
 st.dataframe(
@@ -414,7 +412,6 @@ if selected_project != "Todos":
     of1.metric("Horas concedidas", f"{of_granted:,.1f} h")
     of2.metric("Consumo", "—" if of_consumption is None else f"{of_consumption:.1%}")
 
-    st.subheader("Gráfica Concedidas vs. incurridas por Orden de Fabricación")
     order_chart = (
         orders[["order_number", "hours_granted", "hours_incurred"]]
         .groupby("order_number", as_index=False)[["hours_granted", "hours_incurred"]]
@@ -480,7 +477,6 @@ if selected_project != "Todos":
         },
     )
 
-    st.subheader("Tabla Concedidas vs. incurridas por Orden de Fabricación")
     orders["consumption_pct"] = orders["consumption_ratio"] * 100
     st.dataframe(
         orders[
@@ -540,7 +536,6 @@ if selected_project != "Todos" and selected_order != "Todas":
     b1.metric("Horas concedidas", f"{bonus_granted:,.1f} h")
     b2.metric("Consumo", "—" if bonus_consumption is None else f"{bonus_consumption:.1%}")
 
-    st.subheader("Gráfica Concedidas vs. incurridas por Bono de trabajo")
     bonus_chart = (
         bonuses[["bonus_id", "hours_granted", "hours_incurred"]]
         .groupby("bonus_id", as_index=False)[["hours_granted", "hours_incurred"]]
@@ -608,7 +603,6 @@ if selected_project != "Todos" and selected_order != "Todas":
         },
     )
 
-    st.subheader("Tabla Concedidas vs. incurridas por Bono de trabajo")
     st.dataframe(
         bonuses[
             [
