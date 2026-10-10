@@ -78,8 +78,9 @@ work_centers = query(
 )
 available_centers = work_centers["work_center"].astype(str).tolist()
 default_centers = ["422"] if "422" in available_centers else available_centers
+st.sidebar.markdown("### Filtros jerárquicos")
 selected_centers = st.sidebar.multiselect(
-    "Centro de trabajo (Ct.)",
+    "Centro (Ct.)",
     available_centers,
     default=default_centers,
     help="Selecciona uno o varios centros de trabajo. Por defecto se muestra el 422.",
@@ -106,7 +107,7 @@ managers = query(
 )
 available_managers = managers["project_manager"].astype(str).tolist()
 selected_managers = st.sidebar.multiselect(
-    "Director de proyecto",
+    "Owner · Director de proyecto",
     available_managers,
     default=available_managers,
     help="Filtra por uno o varios directores. La lista se adapta al Ct. seleccionado.",
@@ -143,7 +144,7 @@ projects = query(
 )
 
 all_projects = ["Todos"] + projects["project_code"].dropna().astype(str).tolist()
-selected_project = st.sidebar.selectbox("Proyecto", all_projects)
+selected_project = st.sidebar.selectbox("Project · Proyecto", all_projects)
 
 filtered_projects = projects
 if selected_project != "Todos":
