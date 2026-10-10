@@ -89,7 +89,34 @@ if not selected_centers:
     st.warning("Selecciona al menos un centro de trabajo (Ct.) para visualizar datos.")
     st.stop()
 
-placeholders = ",".join(["%s"] * len(selected_centers))
+center_placeholders = ",".join(["%s"] * len(selected_centers))
+
+managers = query(
+    f"""
+    SELECT DISTINCT p.project_manager
+    FROM fact_hours f
+    LEFT JOIN projects p ON p.project_code = f.project_code
+    WHERE f.snapshot_date = %s
+      AND f.work_center IN ({center_placeholders})
+      AND p.project_manager IS NOT NULL
+      AND TRIM(p.project_manager) <> ''
+    ORDER BY p.project_manager
+    """,
+    (snapshot, *selected_centers),
+)
+available_managers = managers["project_manager"].astype(str).tolist()
+selected_managers = st.sidebar.multiselect(
+    "Director de proyecto",
+    available_managers,
+    default=available_managers,
+    help="Filtra por uno o varios directores. La lista se adapta al Ct. seleccionado.",
+)
+
+if not selected_managers:
+    st.warning("Selecciona al menos un director de proyecto para visualizar datos.")
+    st.stop()
+
+manager_placeholders = ",".join(["%s"] * len(selected_managers))
 projects = query(
     f"""
     SELECT
@@ -107,11 +134,12 @@ projects = query(
     FROM fact_hours f
     LEFT JOIN projects p ON p.project_code = f.project_code
     WHERE f.snapshot_date = %s
-      AND f.work_center IN ({placeholders})
+      AND f.work_center IN ({center_placeholders})
+      AND p.project_manager IN ({manager_placeholders})
     GROUP BY f.project_code
     ORDER BY deviation_hours DESC, f.project_code
     """,
-    (snapshot, *selected_centers),
+    (snapshot, *selected_centers, *selected_managers),
 )
 
 all_projects = ["Todos"] + projects["project_code"].dropna().astype(str).tolist()
@@ -160,16 +188,16 @@ project_table["consumption_pct"] = project_table["consumption_ratio"] * 100
 st.dataframe(
     project_table[
         [
-            "project_code", "project_description", "hours_granted",
-            "hours_incurred", "deviation_hours", "remaining_hours",
-            "consumption_pct"
+            "project_code", "project_description", "project_manager",
+            "hours_granted", "hours_incurred", "deviation_hours",
+            "remaining_hours", "consumption_pct"
         ]
     ],
     use_container_width=True,
     hide_index=True,
 )
 
-order_params = (snapshot, *selected_centers)
+order_params = (snapshot, *selected_centers, *selected_managers)
 order_filter = ""
 if selected_project != "Todos":
     order_filter = "AND f.project_code = %s"
@@ -189,8 +217,10 @@ orders = query(
         CASE WHEN SUM(f.hours_granted)=0 THEN NULL
              ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
     FROM fact_hours f
+    LEFT JOIN projects p ON p.project_code = f.project_code
     WHERE f.snapshot_date = %s
-      AND f.work_center IN ({placeholders})
+      AND f.work_center IN ({center_placeholders})
+      AND p.project_manager IN ({manager_placeholders})
       {order_filter}
     GROUP BY f.project_code, f.order_number
     ORDER BY deviation_hours DESC, f.order_number
@@ -227,13 +257,15 @@ if selected_project != "Todos":
             CASE WHEN SUM(f.hours_granted)=0 THEN NULL
                  ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
         FROM fact_hours f
+        LEFT JOIN projects p ON p.project_code = f.project_code
         WHERE f.snapshot_date = %s
-          AND f.work_center IN ({placeholders})
+          AND f.work_center IN ({center_placeholders})
+          AND p.project_manager IN ({manager_placeholders})
           AND f.project_code = %s
         GROUP BY f.order_number, f.operation_number, f.bonus_id
         ORDER BY deviation_hours DESC, f.order_number, f.operation_number
         """,
-        (snapshot, *selected_centers, selected_project),
+        (snapshot, *selected_centers, *selected_managers, selected_project),
     )
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
