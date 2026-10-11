@@ -38,7 +38,7 @@ if view not in {"home", "risks"}:
     view = "home"
 
 st.title(
-    "Cuadro de mando Planificación"
+    "Planificación"
     if view == "home"
     else "Análisis de riesgos"
 )
@@ -50,6 +50,9 @@ st.markdown(
     <style>
     .block-container {
         padding-bottom: 6.2rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        padding-top: 0.55rem;
     }
     </style>
     """,
@@ -184,7 +187,6 @@ snapshot_options = [
     for value in snapshots["snapshot_date"].dropna().tolist()
 ]
 
-st.sidebar.markdown("### Filtros jerárquicos")
 snapshot = st.sidebar.selectbox(
     "Snapshot",
     snapshot_options,
