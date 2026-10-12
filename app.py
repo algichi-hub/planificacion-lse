@@ -409,7 +409,7 @@ if view == "risks":
             "project_code": st.column_config.TextColumn("Proyecto"),
             "order_number": st.column_config.TextColumn("OF"),
             "order_description": st.column_config.TextColumn("Descripción"),
-            "deviation_hours": st.column_config.NumberColumn("Δ horas", format="%+.1f h"),
+            "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
             "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
             "critical_count": st.column_config.NumberColumn(">110 %"),
             "high_count": st.column_config.NumberColumn("100–110 %"),
@@ -461,7 +461,7 @@ if view == "risks":
             "operation_description": st.column_config.TextColumn("Descripción"),
             "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
             "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
-            "deviation_hours": st.column_config.NumberColumn("Δ horas", format="%+.1f h"),
+            "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
             "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
         },
     )
@@ -566,6 +566,12 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
     column_config={
+        "project_code": st.column_config.TextColumn("Proyecto"),
+        "project_manager": st.column_config.TextColumn("Director de proyecto"),
+        "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
+        "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
+        "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
+        "remaining_hours": st.column_config.NumberColumn("Restantes", format="%+.1f h"),
         "project_description": st.column_config.TextColumn("Descripción"),
         "consumption_pct": st.column_config.NumberColumn(
             "Consumo %",
@@ -707,6 +713,12 @@ if selected_project != "Todos":
         use_container_width=True,
         hide_index=True,
         column_config={
+            "order_number": st.column_config.TextColumn("OF"),
+            "order_status": st.column_config.TextColumn("Estado OF"),
+            "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
+            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
+            "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
+            "remaining_hours": st.column_config.NumberColumn("Restantes", format="%+.1f h"),
             "order_description": st.column_config.TextColumn("Descripción"),
             "consumption_pct": st.column_config.NumberColumn(
                 "Consumo %",
@@ -858,6 +870,11 @@ if selected_project != "Todos" and selected_order != "Todas":
         use_container_width=True,
         hide_index=True,
         column_config={
+            "bonus_id": st.column_config.TextColumn("Bono"),
+            "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
+            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
+            "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
+            "remaining_hours": st.column_config.NumberColumn("Restantes", format="%+.1f h"),
             "operation_description": st.column_config.TextColumn("Descripción"),
             "consumption_pct": st.column_config.NumberColumn(
                 "Consumo %",
