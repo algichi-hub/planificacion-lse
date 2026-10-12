@@ -122,3 +122,21 @@ GROUP BY
     f.order_number,
     f.operation_number,
     f.bonus_id;
+
+-- Snapshot-scoped, validated LLM descriptions. The generic ERP descriptions
+-- remain stored separately and are not used as fallback in the dashboard.
+CREATE TABLE IF NOT EXISTS of_descriptions (
+    snapshot_date DATE NOT NULL,
+    order_number TEXT NOT NULL,
+    of_detailed_description TEXT NOT NULL CHECK (btrim(of_detailed_description) <> ''),
+    source_file_hash TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, order_number)
+);
+
+CREATE TABLE IF NOT EXISTS bonus_descriptions (
+    snapshot_date DATE NOT NULL,
+    bonus_id TEXT NOT NULL,
+    bo_detailed_description TEXT NOT NULL CHECK (btrim(bo_detailed_description) <> ''),
+    source_file_hash TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, bonus_id)
+);
