@@ -446,7 +446,7 @@ if view == "risks":
     st.dataframe(
         displayed_risk[
             [
-                "risk_level", "project_code", "project_manager", "order_number", "bonus_id",
+                "risk_level", "project_code", "project_manager", "bonus_id",
                 "operation_description", "hours_granted", "hours_incurred",
                 "deviation_hours", "consumption_pct"
             ]
@@ -457,7 +457,6 @@ if view == "risks":
             "risk_level": st.column_config.TextColumn("Riesgo"),
             "project_code": st.column_config.TextColumn("Proyecto"),
             "project_manager": st.column_config.TextColumn("Director de proyecto"),
-            "order_number": st.column_config.TextColumn("OF"),
             "bonus_id": st.column_config.TextColumn("Bono"),
             "operation_description": st.column_config.TextColumn("Descripción"),
             "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
