@@ -1,0 +1,129 @@
+# Guía operativa — preparación y carga de snapshots
+
+Sistema **Planificación LSE**. Ejecutar en Windows PowerShell desde la raíz del repositorio, con Python y dependencias del proyecto instaladas.
+
+## Resumen del proceso
+
+1. Exportar los tres ficheros ERP a `data/`.
+2. Preparar expedientes mediante `pre_snapshot.ps1 -Ct 422`. **No escribe en Neon**.
+3. Interpretar el ZIP resultante con el agente LLM, generando los dos CSV de descripciones.
+4. Guardar los CSV interpretados en `data/`.
+5. Ejecutar `load_snapshot.ps1 -Ct 422 -ValidateOnly`. **Sin conexión ni escritura en Neon**.
+6. Revisar el resultado y solo entonces ejecutar `load_snapshot.ps1 -Ct 422`. **Este paso escribe en Neon**.
+
+`-Ct 422` es un ejemplo; utilizar el centro deseado. La fecha de snapshot es opcional y se toma del día actual del sistema, salvo que se indique `-SnapshotDate`.
+
+## Archivos de entrada / salida
+
+| Archivo | Uso |
+|---|---|
+| `data/OOFF_OP_Planif_Terminada.txt` | ERP horas; permite filtrar operaciones por `Ct.` y formar bonos |
+| `data/Proyectos_Sevilla.csv` | Maestro de proyectos |
+| `data/ooff_texto.zip` | Textos internos originales del ERP (solo preparación) |
+| `data/ooff_texto_consolidado.zip` | Salida de preparación; JSON por OF, manifiesto, `indice_of.csv` e `indice_bonos.csv` |
+| `data/ooff_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
+| `data/bono_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
+
+Los archivos `data/*.zip`, `data/*.csv` y `data/*.txt` se excluyen del repositorio mediante `.gitignore`.
+
+## 1. Preparación: pre_snapshot.ps1
+
+```powershell
+.\scripts\pre_snapshot.ps1 -Help
+.\scripts\pre_snapshot.ps1 -Ct 422
+```
+
+Parámetros:
+
+| Parámetro | Valor predeterminado | Uso |
+|---|---|---|
+| `-Ct` | Obligatorio | Centro de trabajo a seleccionar |
+| `-SnapshotDate` | Fecha Windows (yyyy-MM-dd) | Fecha indicada en el manifiesto |
+| `-HoursFile` | `data/OOFF_OP_Planif_Terminada.txt` | Export de horas |
+| `-ProjectsFile` | `data/Proyectos_Sevilla.csv` | Maestro |
+| `-OoffTextoFile` | `data/ooff_texto.zip` | Texto ERP original |
+| `-OutputFile` | `data/ooff_texto_consolidado.zip` | ZIP destino |
+| `-Help` | — | Muestra la ayuda sin procesar datos |
+
+Ejemplo de fecha explícita:
+
+```powershell
+.\scripts\pre_snapshot.ps1 -Ct 422 -SnapshotDate "2026-10-12"
+```
+
+El script selecciona las OF que tengan registros de horas en el Ct elegido, pero conserva **todas las líneas textuales** de cada OF para que el modelo pueda interpretar su contexto, incluyendo operaciones de otros Ct. El ZIP integra el inventario autoritativo de bonos reales del Ct (`indice_bonos.csv`). No asigna ni interpreta descripciones y no utiliza credenciales de Neon.
+
+## 2. Interpretación LLM
+
+Adjuntar `ooff_texto_consolidado.zip` al agente de interpretación. El resultado **debe incluir exactamente**:
+
+`ooff_texto_interpretado.csv`: columnas `OF numero;of_detailed_description`.
+
+`bono_texto_interpretado.csv`: columnas `Bono numero;bo_detailed_description`.
+
+Especificación: UTF-8 con BOM, separador `;`, saltos CRLF, identificadores como texto, una fila por clave de los inventarios, ninguna descripción nula; usar exactamente `Vacío` si no hay texto y `Pendiente confirmar` si el contexto es insuficiente/ambiguo/contradictorio. No inventar bonos a partir de menciones `POS`.
+
+Los resultados del LLM se revisan antes de cargar; la validación automatizada garantiza estructura, cobertura y coherencia de IDs, **no** la verdad técnica de cada descripción.
+
+## 3. Gate de validación: load_snapshot.ps1
+
+```powershell
+.\scripts\load_snapshot.ps1 -Help
+.\scripts\load_snapshot.ps1 -Ct 422 -ValidateOnly
+```
+
+Parámetros:
+
+| Parámetro | Valor predeterminado | Uso |
+|---|---|---|
+| `-Ct` | Obligatorio | Centro cuyas horas se importarán |
+| `-SnapshotDate` | Fecha Windows (yyyy-MM-dd) | Fecha del snapshot |
+| `-HoursFile` | `data/OOFF_OP_Planif_Terminada.txt` | Export ERP de horas |
+| `-ProjectsFile` | `data/Proyectos_Sevilla.csv` | Maestro ERP |
+| `-OfTextFile` | `data/ooff_texto_interpretado.csv` | Interpretación OF |
+| `-BonusTextFile` | `data/bono_texto_interpretado.csv` | Interpretación bonos |
+| `-PreparedZip` | `data/ooff_texto_consolidado.zip` | ZIP preparado; usado para verificar índices, centro, fecha y hashes si existe |
+| `-ValidateOnly` | Desactivado | Validación local sin escritura ni conexión a Neon |
+| `-Help` | — | Ayuda sin conexión ni escritura |
+
+El proceso valida los cuatro ficheros obligatorios, cabeceras, formato CSV, descripciones no vacías, claves únicas y cobertura exacta de OF y bonos del centro. Si el ZIP preparado está disponible, se compara su manifiesto, índices, hashes de horas y proyectos y fecha de preparación. Ante un fallo, la carga no se inicia.
+
+**Importante:** aunque la fecha tiene valor predeterminado, si se preparó el ZIP otro día y se ejecuta la carga más tarde, indicar a ambos scripts la **misma fecha** con `-SnapshotDate`, o regenerar el ZIP antes de validar.
+
+## 4. Carga real: escribe en Neon
+
+**Solo cuando el Gate anterior haya pasado y el usuario haya autorizado la carga:**
+
+```powershell
+# DATABASE_URL debe estar configurada en la sesión PowerShell.
+.\scripts\load_snapshot.ps1 -Ct 422
+```
+
+El script filtra las filas de horas por Ct, inserta sus proyectos y las descripciones de OF y bonos por fecha en PostgreSQL/Neon. Utiliza una transacción: si se produce un fallo SQL se revierte la operación. Repetir una fecha reemplaza sus filas de horas y descripciones para ese snapshot: **no usar para sobrescribir una fecha histórica sin revisar el alcance**.
+
+No compartir nunca `DATABASE_URL` ni otras credenciales.
+
+## 5. Solución de incidencias
+
+- **Archivo ausente:** confirmar los nombres exactos en `data/` y ejecutar de nuevo `-ValidateOnly`.
+- **Falta una OF o bono:** regenerar el ZIP con `pre_snapshot.ps1`, volver a interpretar y revisar los CSV.
+- **Error de fecha:** alinear `-SnapshotDate` de preparación y carga.
+- **Hash de origen distinto:** uno de los exportes cambió; repetir preparación e interpretación.
+- **Error de codificación:** exportar CSV con UTF-8 BOM, `;` y CRLF.
+- **Sin `DATABASE_URL`:** `-ValidateOnly` no necesita credenciales; la carga real sí.
+- **Duda sobre la descripción:** usar `Pendiente confirmar` y revisar el expediente, nunca suplir información por intuición.
+
+## 6. Ejecución típica completa
+
+```powershell
+cd C:\Users\algic\Projects\planificacion-lse
+git pull --ff-only origin v0/sql-dashboard
+
+.\scripts\pre_snapshot.ps1 -Ct 422
+# Adjuntar data/ooff_texto_consolidado.zip al agente y guardar ambos CSV en data/
+.\scripts\load_snapshot.ps1 -Ct 422 -ValidateOnly
+# Después de revisar y autorizar:
+.\scripts\load_snapshot.ps1 -Ct 422
+```
+
+Consultar `-Help` en cualquiera de los scripts para ver sus parámetros en la terminal.
