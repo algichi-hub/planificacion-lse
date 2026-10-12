@@ -284,9 +284,9 @@ if view == "risks":
             COALESCE(MAX(p.description), MAX(f.project_code)) AS project_description,
             MAX(p.project_manager) AS project_manager,
             f.order_number,
-            MAX(f.order_description) AS order_description,
+            COALESCE(MAX(od.of_detailed_description), 'Pendiente confirmar') AS order_description,
             f.bonus_id,
-            MAX(f.operation_description) AS operation_description,
+            COALESCE(MAX(bd.bo_detailed_description), 'Pendiente confirmar') AS operation_description,
             SUM(f.hours_granted) AS hours_granted,
             SUM(f.hours_incurred) AS hours_incurred,
             SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
@@ -296,6 +296,8 @@ if view == "risks":
             END AS consumption_ratio
         FROM fact_hours f
         LEFT JOIN projects p ON p.project_code = f.project_code
+        LEFT JOIN of_descriptions od ON od.snapshot_date = f.snapshot_date AND od.order_number = f.order_number
+        LEFT JOIN bonus_descriptions bd ON bd.snapshot_date = f.snapshot_date AND bd.bonus_id = f.bonus_id
         WHERE f.snapshot_date = %s
           AND f.work_center IN ({center_placeholders})
           AND p.project_manager IN ({manager_placeholders})
@@ -591,7 +593,7 @@ orders = query(
     SELECT
         f.project_code,
         f.order_number,
-        MAX(f.order_description) AS order_description,
+        COALESCE(MAX(od.of_detailed_description), 'Pendiente confirmar') AS order_description,
         MAX(f.order_status) AS order_status,
         SUM(f.hours_granted) AS hours_granted,
         SUM(f.hours_incurred) AS hours_incurred,
@@ -601,6 +603,7 @@ orders = query(
              ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
     FROM fact_hours f
     LEFT JOIN projects p ON p.project_code = f.project_code
+    LEFT JOIN of_descriptions od ON od.snapshot_date = f.snapshot_date AND od.order_number = f.order_number
     WHERE f.snapshot_date = %s
       AND f.work_center IN ({center_placeholders})
       AND p.project_manager IN ({manager_placeholders})
@@ -731,7 +734,7 @@ if selected_project != "Todos" and selected_order != "Todas":
             f.order_number,
             f.operation_number,
             f.bonus_id,
-            MAX(f.operation_description) AS operation_description,
+            COALESCE(MAX(bd.bo_detailed_description), 'Pendiente confirmar') AS operation_description,
             SUM(f.hours_granted) AS hours_granted,
             SUM(f.hours_incurred) AS hours_incurred,
             SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
@@ -740,6 +743,7 @@ if selected_project != "Todos" and selected_order != "Todas":
                  ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
         FROM fact_hours f
         LEFT JOIN projects p ON p.project_code = f.project_code
+        LEFT JOIN bonus_descriptions bd ON bd.snapshot_date = f.snapshot_date AND bd.bonus_id = f.bonus_id
         WHERE f.snapshot_date = %s
           AND f.work_center IN ({center_placeholders})
           AND p.project_manager IN ({manager_placeholders})
