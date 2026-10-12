@@ -1,5 +1,7 @@
 # Planificación LSE
 
+> **Flujo operativo actual:** para preparar OF y bonos, validar los cuatro archivos e importar snapshots por centro de trabajo, consulta [Guía de preparación y carga de snapshots](docs/SNAPSHOT_WORKFLOW.md). Los comandos históricos de importación de esta V0 se conservan solo como referencia y no describen el proceso vigente.
+
 V0 de un sistema de control de horas basado en SQL para sustituir el resumen ejecutivo manual.
 
 ## Objetivo de la V0
