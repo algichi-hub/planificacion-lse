@@ -53,6 +53,8 @@ Ejemplo de fecha explícita:
 
 El script selecciona las OF que tengan registros de horas en el Ct elegido, pero conserva **todas las líneas textuales** de cada OF para que el modelo pueda interpretar su contexto, incluyendo operaciones de otros Ct. El ZIP integra el inventario autoritativo de bonos reales del Ct (`indice_bonos.csv`). No asigna ni interpreta descripciones y no utiliza credenciales de Neon.
 
+**OF ausentes del ZIP de textos:** no se detiene el proceso. Se genera un JSON por cada OF seleccionada, aunque falte en `ooff_texto.zip`, con `records: []`, `missing_in_ooff_texto: true` y `missing_description_value: "### SIN DATOS ###"`. El manifiesto enumera esas OF en `missing_of`. Una ausencia individual no equivale a un ZIP corrupto; los errores de estructura que impiden interpretar las claves siguen siendo bloqueantes.
+
 ## 2. Interpretación LLM
 
 Adjuntar `ooff_texto_consolidado.zip` al agente de interpretación. El resultado **debe incluir exactamente**:
@@ -62,6 +64,8 @@ Adjuntar `ooff_texto_consolidado.zip` al agente de interpretación. El resultado
 `bono_texto_interpretado.csv`: columnas `Bono numero;bo_detailed_description`.
 
 Especificación: UTF-8 con BOM, separador `;`, saltos CRLF, identificadores como texto, una fila por clave de los inventarios, ninguna descripción nula; usar exactamente `Vacío` si no hay texto y `Pendiente confirmar` si el contexto es insuficiente/ambiguo/contradictorio. No inventar bonos a partir de menciones `POS`.
+
+**Regla prioritaria para el LLM:** cuando `missing_in_ooff_texto: true`, escribir exactamente `### SIN DATOS ###` como descripción de esa OF y de todos sus bonos presentes en `indice_bonos.csv`. Reservar `Vacío` para expedientes presentes sin contenido descriptivo, y `Pendiente confirmar` para contenido presente pero insuficiente, ambiguo, contradictorio o corrupto. No sustituir el marcador por una descripción genérica del ERP.
 
 Los resultados del LLM se revisan antes de cargar; la validación automatizada garantiza estructura, cobertura y coherencia de IDs, **no** la verdad técnica de cada descripción.
 
