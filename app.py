@@ -446,9 +446,9 @@ if view == "risks":
     st.dataframe(
         displayed_risk[
             [
-                "risk_level", "project_code", "order_number", "bonus_id",
+                "risk_level", "project_code", "project_description", "order_number", "bonus_id",
                 "operation_description", "hours_granted", "hours_incurred",
-                "deviation_hours", "consumption_pct", "project_manager"
+                "deviation_hours", "consumption_pct"
             ]
         ],
         use_container_width=True,
@@ -456,6 +456,7 @@ if view == "risks":
         column_config={
             "risk_level": st.column_config.TextColumn("Riesgo"),
             "project_code": st.column_config.TextColumn("Proyecto"),
+            "project_description": st.column_config.TextColumn("Descripción del proyecto"),
             "order_number": st.column_config.TextColumn("OF"),
             "bonus_id": st.column_config.TextColumn("Bono"),
             "operation_description": st.column_config.TextColumn("Descripción"),
@@ -463,7 +464,6 @@ if view == "risks":
             "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
             "deviation_hours": st.column_config.NumberColumn("Δ horas", format="%+.1f h"),
             "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
-            "project_manager": st.column_config.TextColumn("Owner"),
         },
     )
 
