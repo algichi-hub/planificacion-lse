@@ -42,7 +42,7 @@ def select_of(hours: Path, ct: str):
     required = {'Orden', 'Ct.', 'Proyec', 'Opr.'}
     if not required.issubset(headers):
         raise ValueError('Faltan columnas obligatorias en horas: '+repr(sorted(required-set(headers))))
-    selected, operations, projects = set(), set(), set()
+    selected, operations, projects = set(), {}, set()
     hours_rows = 0
     for _, r in lines:
         if r.get('Ct.', '').strip() != ct:
@@ -59,7 +59,7 @@ def select_of(hours: Path, ct: str):
                 raise ValueError(f'Operación no numérica, OF {order}: {operation!r}') from exc
             if not 0 <= op <= 9999:
                 raise ValueError(f'Operación fuera del rango de 4 dígitos, OF {order}: {op}')
-            operations.add(f'{order}{op:04d}')
+            operations[f'{order}{op:04d}'] = (order, f'{op:04d}')
     if not selected:
         raise ValueError(f'No hay registros para Ct. {ct}')
     return selected, operations, projects, hours_rows
@@ -120,6 +120,12 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
     idx = io.StringIO()
     writer = csv.writer(idx, delimiter=';')
     writer.writerow(['order_number','source_rows','nonempty_text_rows','empty_text_rows','json_entry'])
+    bono_idx = io.StringIO(newline='')
+    bono_writer = csv.writer(bono_idx, delimiter=';', lineterminator='\r\n')
+    bono_writer.writerow(['Bono numero', 'OF numero', 'POS numero'])
+    for bonus_id in sorted(operations):
+        order, pos = operations[bonus_id]
+        bono_writer.writerow([bonus_id, order, pos])
     try:
         with zipfile.ZipFile(temp, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             for order in sorted(selected):
@@ -143,11 +149,29 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                         'json_included':len(grouped),'missing_of':missing,
                         'note':'No se interpreta el contenido. POS de cualquier Ct. dentro de estas OF se preservan para dar contexto.'}
             z.writestr('indice_of.csv',idx.getvalue().encode('utf-8-sig'))
+            z.writestr('indice_bonos.csv', bono_idx.getvalue().encode('utf-8-sig'))
             z.writestr('manifiesto.json',json.dumps(manifest, ensure_ascii=False,indent=2))
         with zipfile.ZipFile(temp) as z:
             if z.testzip() is not None: raise ValueError('ZIP generado incorrectamente')
             items=[n for n in z.namelist() if n.startswith('of/') and n.endswith('.json')]
             if len(items)!=len(selected): raise ValueError('Número de JSON inesperado')
+            with z.open('indice_bonos.csv') as bonus_file:
+                bonus_rows = list(csv.DictReader(
+                    io.TextIOWrapper(bonus_file, encoding='utf-8-sig', newline=''),
+                    delimiter=';'
+                ))
+            if len(bonus_rows) != len(operations):
+                raise ValueError('El índice no contiene todos los bonos')
+            indexed_bonuses = {row['Bono numero'] for row in bonus_rows}
+            if indexed_bonuses != set(operations):
+                raise ValueError('El índice de bonos no coincide con los registros de horas')
+            if any(
+                row['OF numero'] not in selected
+                or row['Bono numero'] != row['OF numero'] + row['POS numero']
+                or len(row['POS numero']) != 4
+                for row in bonus_rows
+            ):
+                raise ValueError('Índice de bonos con claves inválidas')
             if sum(json.loads(z.read(name))['source_rows_count'] for name in items)!=issues['selected_source_lines']:
                 raise ValueError('No se preservaron todas las líneas seleccionadas')
         temp.replace(output)
