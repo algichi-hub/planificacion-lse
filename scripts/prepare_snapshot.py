@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Prepara un ZIP de expedientes OOFF para un Ct sin interpretar ni modificar Neon.
+
+Lee los tres exports ERP y genera data/ooff_texto_consolidado.zip.
+Solo conserva en el ZIP los JSON de las OF que aparecen en el Ct solicitado
+según el fichero de horas; cada JSON conserva TODAS las líneas originales de esa OF.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import io
+import json
+import re
+import zipfile
+from collections import Counter, defaultdict
+from pathlib import Path
+
+from consolidar_ooff_texto import HEADERS, parse_line
+
+
+def normalized_order(value: str) -> str:
+    val = value.strip().lstrip('"').strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]+', val):
+        raise ValueError(f'Número de OF no válido: {value!r}')
+    return val
+
+
+def read_pipe(path: Path):
+    with path.open('r', encoding='cp1252', newline='') as fd:
+        reader = csv.reader(fd, delimiter='|')
+        header = [v.strip() for v in next(reader)]
+        yield header, None
+        for n, row in enumerate(reader, start=2):
+            yield n, dict(zip(header, (v.strip() for v in row)))
+
+
+def select_of(hours: Path, ct: str):
+    lines = read_pipe(hours)
+    headers, _ = next(lines)
+    required = {'Orden', 'Ct.', 'Proyec', 'Opr.'}
+    if not required.issubset(headers):
+        raise ValueError('Faltan columnas obligatorias en horas: '+repr(sorted(required-set(headers))))
+    selected, operations, projects = set(), set(), set()
+    hours_rows = 0
+    for _, r in lines:
+        if r.get('Ct.', '').strip() != ct:
+            continue
+        hours_rows += 1
+        order = normalized_order(r['Orden'])
+        selected.add(order)
+        projects.add(r.get('Proyec', '').strip())
+        operation = r.get('Opr.', '').strip()
+        if operation:
+            try:
+                op = int(operation)
+            except ValueError as exc:
+                raise ValueError(f'Operación no numérica, OF {order}: {operation!r}') from exc
+            if not 0 <= op <= 9999:
+                raise ValueError(f'Operación fuera del rango de 4 dígitos, OF {order}: {op}')
+            operations.add(f'{order}{op:04d}')
+    if not selected:
+        raise ValueError(f'No hay registros para Ct. {ct}')
+    return selected, operations, projects, hours_rows
+
+
+def check_projects(projects: Path):
+    lines = read_pipe(projects)
+    header, _ = next(lines)
+    if not {'Proyecto', 'Descripción', 'Estatus'}.issubset(header):
+        raise ValueError('El maestro de proyectos no tiene las columnas esperadas')
+    return {r.get('Proyecto', '').strip() for _, r in lines if r.get('Proyecto', '').strip()}
+
+
+def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, snapshot_date: str):
+    for p in (hours, projects, source):
+        if not p.is_file():
+            raise FileNotFoundError(str(p))
+    if output.resolve() in {p.resolve() for p in (hours,projects,source)}:
+        raise ValueError('La salida no puede sobrescribir ninguna entrada')
+    selected, operations, project_codes, hours_rows = select_of(hours, ct)
+    master_projects = check_projects(projects)
+    missing_projects = sorted(project_codes - master_projects - {''})
+    if missing_projects:
+        raise ValueError(f'Proyectos de Ct. {ct} ausentes del maestro: {missing_projects[:20]}')
+    grouped = defaultdict(list)
+    issues = Counter()
+    with zipfile.ZipFile(source) as z:
+        members = [x for x in z.infolist() if not x.is_dir()]
+        if len(members) != 1 or not members[0].filename.lower().endswith('.csv'):
+            raise ValueError('El ZIP debe contener exactamente un fichero CSV')
+        with z.open(members[0]) as fp:
+            for n, raw_bytes in enumerate(fp, 1):
+                raw = raw_bytes.decode('cp1252')
+                values, extra = parse_line(raw)
+                if n == 1:
+                    if tuple(v.strip().rstrip(';') for v in values) != HEADERS:
+                        raise ValueError('Cabecera inesperada en ooff_texto.zip')
+                    continue
+                issues['source_lines_total'] += 1
+                order = normalized_order(values[0])
+                if order not in selected:
+                    continue
+                issues['selected_source_lines'] += 1
+                if extra: issues['selected_embedded_pipes'] += 1
+                grouped[order].append({
+                    'source_line_number': n,
+                    'source_raw_line': raw.rstrip('\r\n'),
+                    'source_order_field': values[0],
+                    'fields': dict(zip(HEADERS, values)),
+                    'embedded_pipe_in_text': extra
+                })
+    missing = sorted(selected - set(grouped))
+    if missing:
+        raise ValueError(f'Faltan {len(missing)} OF en ooff_texto.zip: {missing[:30]}')
+    hashes = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (hours,projects,source)}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temp = output.with_name(output.name+'.tmp')
+    idx = io.StringIO()
+    writer = csv.writer(idx, delimiter=';')
+    writer.writerow(['order_number','source_rows','nonempty_text_rows','empty_text_rows','json_entry'])
+    try:
+        with zipfile.ZipFile(temp, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+            for order in sorted(selected):
+                records = grouped[order]
+                nonempty = sum(bool(x['fields']['Texto'].strip()) for x in records)
+                entry = f'of/{order}.json'
+                dossier = {'order_number':order,'source_file':members[0].filename,
+                           'source_zip_sha256':hashes[source.name],
+                           'source_rows_count':len(records),'records':records}
+                z.writestr(entry, json.dumps(dossier, ensure_ascii=False, separators=(',',':')))
+                writer.writerow([order,len(records),nonempty,len(records)-nonempty,entry])
+            manifest = {'purpose':'consolidacion_literal_sin_interpretacion',
+                        'centro_trabajo':ct,'snapshot_date':snapshot_date,
+                        'source_files_sha256':hashes,
+                        'hours_records_selected':hours_rows,
+                        'unique_of_selected':len(selected),
+                        'unique_bonuses_selected':len(operations),
+                        'source_lines_selected':issues['selected_source_lines'],
+                        'selected_embedded_pipe_rows':issues['selected_embedded_pipes'],
+                        'source_lines_total':issues['source_lines_total'],
+                        'json_included':len(grouped),'missing_of':missing,
+                        'note':'No se interpreta el contenido. POS de cualquier Ct. dentro de estas OF se preservan para dar contexto.'}
+            z.writestr('indice_of.csv',idx.getvalue().encode('utf-8-sig'))
+            z.writestr('manifiesto.json',json.dumps(manifest, ensure_ascii=False,indent=2))
+        with zipfile.ZipFile(temp) as z:
+            if z.testzip() is not None: raise ValueError('ZIP generado incorrectamente')
+            items=[n for n in z.namelist() if n.startswith('of/') and n.endswith('.json')]
+            if len(items)!=len(selected): raise ValueError('Número de JSON inesperado')
+            if sum(json.loads(z.read(name))['source_rows_count'] for name in items)!=issues['selected_source_lines']:
+                raise ValueError('No se preservaron todas las líneas seleccionadas')
+        temp.replace(output)
+    finally:
+        if temp.exists(): temp.unlink()
+    return manifest
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--ct', required=True)
+    parser.add_argument('--hours',required=True,type=Path)
+    parser.add_argument('--projects',required=True,type=Path)
+    parser.add_argument('--ooff-texto',required=True,type=Path)
+    parser.add_argument('--output',required=True,type=Path)
+    parser.add_argument('--snapshot-date',required=True)
+    args=parser.parse_args()
+    print(json.dumps(prepare(args.hours,args.projects,args.ooff_texto,args.output,args.ct,args.snapshot_date),ensure_ascii=False,indent=2))
+
+if __name__=='__main__': main()
