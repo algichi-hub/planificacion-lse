@@ -112,8 +112,8 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                     'embedded_pipe_in_text': extra
                 })
     missing = sorted(selected - set(grouped))
-    if missing:
-        raise ValueError(f'Faltan {len(missing)} OF en ooff_texto.zip: {missing[:30]}')
+    # Una OF sin expediente de textos sigue siendo una OF válida del ERP.
+    # Se genera un JSON vacío y marcado explícitamente para interpretación LLM.
     hashes = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (hours,projects,source)}
     output.parent.mkdir(parents=True, exist_ok=True)
     temp = output.with_name(output.name+'.tmp')
@@ -134,7 +134,10 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                 entry = f'of/{order}.json'
                 dossier = {'order_number':order,'source_file':members[0].filename,
                            'source_zip_sha256':hashes[source.name],
-                           'source_rows_count':len(records),'records':records}
+                           'source_rows_count':len(records),
+                           'missing_in_ooff_texto': order in missing,
+                           'missing_description_value': '### SIN DATOS ###' if order in missing else None,
+                           'records':records}
                 z.writestr(entry, json.dumps(dossier, ensure_ascii=False, separators=(',',':')))
                 writer.writerow([order,len(records),nonempty,len(records)-nonempty,entry])
             manifest = {'purpose':'consolidacion_literal_sin_interpretacion',
@@ -146,8 +149,9 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                         'source_lines_selected':issues['selected_source_lines'],
                         'selected_embedded_pipe_rows':issues['selected_embedded_pipes'],
                         'source_lines_total':issues['source_lines_total'],
-                        'json_included':len(grouped),'missing_of':missing,
-                        'note':'No se interpreta el contenido. POS de cualquier Ct. dentro de estas OF se preservan para dar contexto.'}
+                        'json_included':len(selected),'missing_of':missing,
+                        'missing_of_count':len(missing),
+                        'note':'Todas las OF seleccionadas tienen JSON. Si missing_in_ooff_texto es true, el LLM debe escribir exactamente ### SIN DATOS ### para la OF y sus bonos. POS de otros Ct. se preservan para dar contexto.'}
             z.writestr('indice_of.csv',idx.getvalue().encode('utf-8-sig'))
             z.writestr('indice_bonos.csv', bono_idx.getvalue().encode('utf-8-sig'))
             z.writestr('manifiesto.json',json.dumps(manifest, ensure_ascii=False,indent=2))
@@ -174,6 +178,10 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                 raise ValueError('Índice de bonos con claves inválidas')
             if sum(json.loads(z.read(name))['source_rows_count'] for name in items)!=issues['selected_source_lines']:
                 raise ValueError('No se preservaron todas las líneas seleccionadas')
+            for order in missing:
+                dossier = json.loads(z.read(f'of/{order}.json'))
+                if not dossier['missing_in_ooff_texto'] or dossier['records']:
+                    raise ValueError(f'OF ausente mal representada: {order}')
         temp.replace(output)
     finally:
         if temp.exists(): temp.unlink()
