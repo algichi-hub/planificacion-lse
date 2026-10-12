@@ -1,5 +1,4 @@
 param(
-    [Parameter(Mandatory = $true)]
     [string]$Ct,
     [string]$SnapshotDate = (Get-Date -Format "yyyy-MM-dd"),
     [string]$HoursFile = "data/OOFF_OP_Planif_Terminada.txt",
@@ -7,10 +6,42 @@ param(
     [string]$OfTextFile = "data/ooff_texto_interpretado.csv",
     [string]$BonusTextFile = "data/bono_texto_interpretado.csv",
     [string]$PreparedZip = "data/ooff_texto_consolidado.zip",
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+    [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+if ($Help) {
+    @'
+VALIDACIÓN E IMPORTACIÓN DEL SNAPSHOT A NEON
+
+USO:
+  .\scripts\load_snapshot.ps1 -Ct 422 -ValidateOnly
+  .\scripts\load_snapshot.ps1 -Ct 422
+  .\scripts\load_snapshot.ps1 -Ct 422 -SnapshotDate 2026-10-12 -ValidateOnly
+  .\scripts\load_snapshot.ps1 -Help
+
+PARÁMETROS:
+  -Ct             Centro obligatorio salvo con -Help.
+  -SnapshotDate   Fecha de snapshot, por defecto hoy (yyyy-MM-dd).
+  -HoursFile      data/OOFF_OP_Planif_Terminada.txt.
+  -ProjectsFile   data/Proyectos_Sevilla.csv.
+  -OfTextFile     data/ooff_texto_interpretado.csv.
+  -BonusTextFile  data/bono_texto_interpretado.csv.
+  -PreparedZip    data/ooff_texto_consolidado.zip (índices, fecha y hashes).
+  -ValidateOnly   Valida archivos sin conectarse ni escribir en Neon.
+  -Help           Muestra esta ayuda y termina sin conectarse a Neon.
+
+IMPORTANTE: Sin -ValidateOnly se conecta a Neon y escribe el snapshot.
+Se requiere DATABASE_URL para escribir. Valida primero, revisa los datos
+y usa la fecha coherente con la preparación si se ejecuta otro día.
+Más información: docs/SNAPSHOT_WORKFLOW.md.
+'@ | Write-Host
+    return
+}
+if ([string]::IsNullOrWhiteSpace($Ct)) {
+    throw "El parámetro -Ct es obligatorio. Ejecuta el script con -Help para ver su uso."
+}
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 
