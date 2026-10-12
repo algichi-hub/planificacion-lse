@@ -6,3 +6,4 @@ data/*.txt
 data/*.csv
 data/*.xlsx
 .streamlit/secrets.toml
+data/*.zip
