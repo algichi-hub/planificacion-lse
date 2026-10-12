@@ -2,6 +2,8 @@
 
 Sistema **Planificación LSE**. Ejecutar en Windows PowerShell desde la raíz del repositorio, con Python y dependencias del proyecto instaladas.
 
+**Prompt maestro para interpretar los expedientes:** [LLM_ERP_PROMPT.md](LLM_ERP_PROMPT.md). Emplear siempre su versión vigente con el ZIP generado por `pre_snapshot.ps1`.
+
 ## Resumen del proceso
 
 1. Exportar los tres ficheros ERP a `data/`.
