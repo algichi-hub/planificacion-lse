@@ -415,6 +415,8 @@ if view == "risks":
         hover_data={"bonus_count": True, "Horas": ":,.1f"},
         labels={"project_code": "Proyecto", "bonus_count": "Bonos"},
     )
+    # Reduce each horizontal bar to half Plotly’s default grouped-bar thickness.
+    fig_project_risk.update_traces(width=0.2)
     fig_project_risk.update_layout(
         height=max(330, 48 * len(project_risk) + 130),
         xaxis=dict(title="Horas", fixedrange=True, rangemode="tozero"),
