@@ -304,7 +304,6 @@ if view == "risks":
           AND p.status IN ({status_placeholders})
           AND f.bonus_id IS NOT NULL
         GROUP BY f.project_code, f.order_number, f.bonus_id
-        HAVING SUM(f.hours_granted) <> 0 OR SUM(f.hours_incurred) <> 0
         """,
         (snapshot, *selected_centers, *selected_managers, *selected_statuses),
     )
@@ -369,53 +368,71 @@ if view == "risks":
         )
 
     st.divider()
-    st.subheader("OF PRIORIZADAS POR DELTA DE HORAS")
+    st.subheader("EXCESOS Y HORAS DISPONIBLES POR PROYECTO")
+    st.caption(
+        "Cálculo individual por bono: exceso = máx(incurridas − concedidas, 0); "
+        "disponible = máx(concedidas − incurridas, 0). "
+        "Los excesos y disponibles no se compensan entre bonos."
+    )
 
-    of_risk = (
-        risk_bonuses.groupby(
-            ["project_code", "project_description", "project_manager", "order_number", "order_description"],
-            as_index=False,
-        )
+    project_risk = risk_bonuses.copy()
+    project_risk["excess_hours"] = project_risk["deviation_hours"].clip(lower=0)
+    project_risk["available_hours"] = (-project_risk["deviation_hours"]).clip(lower=0)
+    project_risk = (
+        project_risk.groupby("project_code", as_index=False)
         .agg(
-            hours_granted=("hours_granted", "sum"),
-            hours_incurred=("hours_incurred", "sum"),
-            deviation_hours=("deviation_hours", "sum"),
+            excess_hours=("excess_hours", "sum"),
+            available_hours=("available_hours", "sum"),
             bonus_count=("bonus_id", "nunique"),
-            critical_count=("risk_level", lambda s: (s == "Crítico >110%").sum()),
-            high_count=("risk_level", lambda s: (s == "Alto 100–110%").sum()),
-            watch_count=("risk_level", lambda s: (s == "Vigilancia 90–100%").sum()),
-            normal_count=("risk_level", lambda s: (s == "Normal <90%").sum()),
         )
-    )
-    of_risk["consumption_pct"] = (
-        of_risk["hours_incurred"] / of_risk["hours_granted"].replace(0, pd.NA) * 100
-    )
-    of_risk = of_risk.sort_values(
-        ["deviation_hours", "critical_count", "high_count"],
-        ascending=[False, False, False],
+        .sort_values(["excess_hours", "available_hours", "project_code"],
+                     ascending=[False, False, True])
     )
 
-    st.dataframe(
-        of_risk[
-            [
-                "project_code", "order_number", "order_description",
-                "deviation_hours", "consumption_pct", "critical_count",
-                "high_count", "watch_count", "normal_count", "bonus_count"
-            ]
-        ],
+    project_chart = project_risk.melt(
+        id_vars=["project_code", "bonus_count"],
+        value_vars=["excess_hours", "available_hours"],
+        var_name="Serie",
+        value_name="Horas",
+    )
+    project_chart["Serie"] = project_chart["Serie"].map({
+        "excess_hours": "Excedidas",
+        "available_hours": "Disponibles",
+    })
+    project_chart["project_code"] = project_chart["project_code"].astype(str)
+    fig_project_risk = px.bar(
+        project_chart,
+        y="project_code",
+        x="Horas",
+        color="Serie",
+        orientation="h",
+        barmode="group",
+        color_discrete_map={"Excedidas": "#E05252", "Disponibles": "#36A66A"},
+        category_orders={
+            "project_code": project_risk["project_code"].astype(str).tolist(),
+            "Serie": ["Excedidas", "Disponibles"],
+        },
+        hover_data={"bonus_count": True, "Horas": ":,.1f"},
+        labels={"project_code": "Proyecto", "bonus_count": "Bonos"},
+    )
+    fig_project_risk.update_layout(
+        height=max(330, 48 * len(project_risk) + 130),
+        xaxis=dict(title="Horas", fixedrange=True, rangemode="tozero"),
+        yaxis=dict(title=None, fixedrange=True, autorange="reversed"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="center", x=0.5, title=None),
+        dragmode=False,
+        margin=dict(l=10, r=10, t=65, b=20),
+    )
+    st.plotly_chart(
+        fig_project_risk,
         use_container_width=True,
-        hide_index=True,
-        column_config={
-            "project_code": st.column_config.TextColumn("Proyecto"),
-            "order_number": st.column_config.TextColumn("OF"),
-            "order_description": st.column_config.TextColumn("Descripción"),
-            "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
-            "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
-            "critical_count": st.column_config.NumberColumn(">110 %"),
-            "high_count": st.column_config.NumberColumn("100–110 %"),
-            "watch_count": st.column_config.NumberColumn("90–100 %"),
-            "normal_count": st.column_config.NumberColumn("<90 %"),
-            "bonus_count": st.column_config.NumberColumn("Bonos"),
+        theme="streamlit",
+        config={
+            "displayModeBar": False,
+            "scrollZoom": False,
+            "doubleClick": False,
+            "showTips": False,
         },
     )
 
@@ -428,7 +445,7 @@ if view == "risks":
         ["Todos"] + risk_labels,
         key="risk_level_filter",
     )
-    risk_orders = ["Todas"] + of_risk["order_number"].dropna().astype(str).drop_duplicates().tolist()
+    risk_orders = ["Todas"] + risk_bonuses["order_number"].dropna().astype(str).drop_duplicates().tolist()
     selected_risk_order = filter_col2.selectbox(
         "Orden de Fabricación",
         risk_orders,
