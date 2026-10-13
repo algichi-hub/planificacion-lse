@@ -339,15 +339,22 @@ if view == "risks":
         "Normal <90%": 3,
     })
 
-    # Prioridad por delta de horas, no por porcentaje.
+    # Orden por magnitud del desvío de cada bono, no por porcentaje:
+    # +50 h de exceso y -50 h de disponible tienen la misma magnitud.
+    # En caso de empate, primero el exceso positivo.
+    risk_bonuses["absolute_deviation_hours"] = risk_bonuses["deviation_hours"].abs()
     risk_bonuses = risk_bonuses.sort_values(
-        ["deviation_hours", "risk_order", "project_code", "order_number", "bonus_id"],
-        ascending=[False, True, True, True, True],
+        ["absolute_deviation_hours", "deviation_hours", "risk_order",
+         "project_code", "order_number", "bonus_id"],
+        ascending=[False, False, True, True, True, True],
+        kind="stable",
     ).reset_index(drop=True)
 
     st.caption(
-        "Priorización por Δ horas = horas incurridas − horas concedidas. "
-        "El porcentaje se usa únicamente para clasificar el nivel de riesgo."
+        "Priorización por valor absoluto de Δ horas (incurridas − concedidas), "
+        "de mayor a menor, tanto para excesos como para horas disponibles. "
+        "A igualdad de magnitud, primero el exceso. "
+        "El porcentaje solo clasifica el nivel de riesgo."
     )
 
     risk_labels = [
