@@ -444,25 +444,68 @@ if view == "risks":
     st.divider()
     st.subheader("BONOS PRIORIZADOS POR DELTA DE HORAS")
 
-    filter_col1, filter_col2 = st.columns(2)
-    selected_risk = filter_col1.selectbox(
-        "Nivel de riesgo",
-        ["Todos"] + risk_labels,
-        key="risk_level_filter",
+    # Hierarchy: project manager -> project -> manufacturing order.
+    # Keep the risk-level filter independent from these three selectors.
+    director_col, project_col, order_col = st.columns(3)
+
+    risk_directors = sorted(
+        risk_bonuses["project_manager"].dropna().astype(str).unique().tolist()
     )
-    risk_orders = ["Todas"] + risk_bonuses["order_number"].dropna().astype(str).drop_duplicates().tolist()
-    selected_risk_order = filter_col2.selectbox(
+    chosen_director = director_col.selectbox(
+        "Director de proyecto",
+        ["Todos"] + risk_directors,
+        key="risk_director_filter",
+    )
+
+    scoped_projects = risk_bonuses.copy()
+    if chosen_director != "Todos":
+        scoped_projects = scoped_projects[
+            scoped_projects["project_manager"].astype(str) == chosen_director
+        ]
+
+    risk_projects = sorted(
+        scoped_projects["project_code"].dropna().astype(str).unique().tolist()
+    )
+    project_options = ["Todos"] + risk_projects
+    if st.session_state.get("risk_project_filter") not in project_options:
+        st.session_state["risk_project_filter"] = "Todos"
+    chosen_project = project_col.selectbox(
+        "Proyecto",
+        project_options,
+        key="risk_project_filter",
+    )
+
+    scoped_orders = scoped_projects.copy()
+    if chosen_project != "Todos":
+        scoped_orders = scoped_orders[
+            scoped_orders["project_code"].astype(str) == chosen_project
+        ]
+
+    risk_orders = ["Todas"] + sorted(
+        scoped_orders["order_number"].dropna().astype(str).unique().tolist()
+    )
+    if st.session_state.get("risk_order_filter") not in risk_orders:
+        st.session_state["risk_order_filter"] = "Todas"
+    selected_risk_order = order_col.selectbox(
         "Orden de Fabricación",
         risk_orders,
         key="risk_order_filter",
     )
 
-    displayed_risk = risk_bonuses.copy()
-    if selected_risk != "Todos":
-        displayed_risk = displayed_risk[displayed_risk["risk_level"] == selected_risk]
+    selected_risk = st.selectbox(
+        "Nivel de riesgo",
+        ["Todos"] + risk_labels,
+        key="risk_level_filter",
+    )
+
+    displayed_risk = scoped_orders.copy()
     if selected_risk_order != "Todas":
         displayed_risk = displayed_risk[
             displayed_risk["order_number"].astype(str) == selected_risk_order
+        ]
+    if selected_risk != "Todos":
+        displayed_risk = displayed_risk[
+            displayed_risk["risk_level"] == selected_risk
         ]
 
     st.dataframe(
