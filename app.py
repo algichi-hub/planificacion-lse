@@ -547,6 +547,10 @@ fig = px.bar(
     y="Horas",
     color="Serie",
     barmode="group",
+    color_discrete_map={
+        "Concedidas": "#1F4E8C",  # Azul oscuro
+        "Incurridas": "#70B7EA",  # Azul claro
+    },
     labels={"project_code": "Proyecto", "Horas": ""},
 )
 fig.update_layout(
