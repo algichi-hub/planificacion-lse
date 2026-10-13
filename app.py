@@ -579,7 +579,12 @@ fig_directors = px.bar(
     labels={"project_manager": "Director de proyecto", "project_count": "Proyectos"},
 )
 fig_directors.update_layout(
-    xaxis=dict(fixedrange=True),
+    xaxis=dict(
+        fixedrange=True,
+        tickmode="array",
+        tickvals=director_summary["project_manager"].tolist(),
+        ticktext=director_summary["project_manager"].astype(str).str[:6].tolist(),
+    ),
     yaxis=dict(fixedrange=True),
     dragmode=False,
     legend=dict(
