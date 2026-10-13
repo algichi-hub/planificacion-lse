@@ -451,20 +451,30 @@ if view == "risks":
     st.divider()
     st.subheader("BONOS PRIORIZADOS POR DELTA DE HORAS")
 
-    # Hierarchy: project manager -> project -> manufacturing order.
-    # Keep the risk-level filter independent from these three selectors.
-    director_col, project_col, order_col = st.columns(3)
-
-    risk_directors = sorted(
-        risk_bonuses["project_manager"].dropna().astype(str).unique().tolist()
+    # Strict hierarchy: risk level -> manager -> project -> manufacturing order.
+    selected_risk = st.selectbox(
+        "Nivel de riesgo",
+        ["Todos"] + risk_labels,
+        key="risk_level_filter",
     )
+    scoped_risk = risk_bonuses.copy()
+    if selected_risk != "Todos":
+        scoped_risk = scoped_risk[scoped_risk["risk_level"] == selected_risk]
+
+    director_col, project_col, order_col = st.columns(3)
+    risk_directors = sorted(
+        scoped_risk["project_manager"].dropna().astype(str).unique().tolist()
+    )
+    director_options = ["Todos"] + risk_directors
+    if st.session_state.get("risk_director_filter") not in director_options:
+        st.session_state["risk_director_filter"] = "Todos"
     chosen_director = director_col.selectbox(
         "Director de proyecto",
-        ["Todos"] + risk_directors,
+        director_options,
         key="risk_director_filter",
     )
 
-    scoped_projects = risk_bonuses.copy()
+    scoped_projects = scoped_risk.copy()
     if chosen_director != "Todos":
         scoped_projects = scoped_projects[
             scoped_projects["project_manager"].astype(str) == chosen_director
@@ -499,20 +509,10 @@ if view == "risks":
         key="risk_order_filter",
     )
 
-    selected_risk = st.selectbox(
-        "Nivel de riesgo",
-        ["Todos"] + risk_labels,
-        key="risk_level_filter",
-    )
-
     displayed_risk = scoped_orders.copy()
     if selected_risk_order != "Todas":
         displayed_risk = displayed_risk[
             displayed_risk["order_number"].astype(str) == selected_risk_order
-        ]
-    if selected_risk != "Todos":
-        displayed_risk = displayed_risk[
-            displayed_risk["risk_level"] == selected_risk
         ]
 
     st.dataframe(
