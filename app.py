@@ -585,7 +585,7 @@ fig_directors.update_layout(
         tickvals=director_summary["project_manager"].tolist(),
         ticktext=director_summary["project_manager"].astype(str).str[:6].tolist(),
     ),
-    yaxis=dict(fixedrange=True),
+    yaxis=dict(fixedrange=True, title=None),
     dragmode=False,
     legend=dict(
         orientation="h",
