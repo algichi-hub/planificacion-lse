@@ -649,8 +649,8 @@ fig = px.bar(
     color="Serie",
     barmode="group",
     color_discrete_map={
-        "Concedidas": "#1F4E8C",  # Azul oscuro
-        "Incurridas": "#70B7EA",  # Azul claro
+        "Concedidas": "#70B7EA",  # Azul claro
+        "Incurridas": "#1F4E8C",  # Azul oscuro
     },
     labels={"project_code": "Proyecto", "Horas": ""},
 )
