@@ -525,7 +525,103 @@ deviation = incurred - granted
 consumption = (incurred / granted) if granted else None
 
 st.divider()
-st.subheader("RESUMEN PROYECTO")
+st.subheader("RESUMEN DIRECTORES")
+
+# Se agregan los proyectos ya filtrados, evitando duplicar horas de un proyecto.
+director_summary = (
+    filtered_projects.groupby("project_manager", as_index=False, dropna=False)
+    .agg(
+        hours_granted=("hours_granted", "sum"),
+        hours_incurred=("hours_incurred", "sum"),
+        project_count=("project_code", "nunique"),
+    )
+    .sort_values("hours_granted", ascending=False)
+)
+director_summary["project_manager"] = director_summary["project_manager"].fillna("Sin director")
+director_summary["deviation_hours"] = (
+    director_summary["hours_incurred"] - director_summary["hours_granted"]
+)
+director_summary["consumption_pct"] = (
+    director_summary["hours_incurred"]
+    / director_summary["hours_granted"].replace(0, float("nan"))
+    * 100
+)
+
+d1, d2 = st.columns(2)
+d1.metric("Horas concedidas", f"{granted:,.1f} h")
+d2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
+
+director_chart = director_summary.melt(
+    id_vars=["project_manager", "project_count"],
+    value_vars=["hours_granted", "hours_incurred"],
+    var_name="Serie",
+    value_name="Horas",
+)
+director_chart["Serie"] = director_chart["Serie"].map({
+    "hours_granted": "Concedidas",
+    "hours_incurred": "Incurridas",
+})
+fig_directors = px.bar(
+    director_chart,
+    x="project_manager",
+    y="Horas",
+    color="Serie",
+    barmode="group",
+    color_discrete_map={
+        "Concedidas": "#B69CE8",  # Morado claro
+        "Incurridas": "#6034A0",  # Morado oscuro
+    },
+    category_orders={
+        "project_manager": director_summary["project_manager"].tolist(),
+        "Serie": ["Concedidas", "Incurridas"],
+    },
+    hover_data={"project_count": True},
+    labels={"project_manager": "Director de proyecto", "project_count": "Proyectos"},
+)
+fig_directors.update_layout(
+    xaxis=dict(fixedrange=True),
+    yaxis=dict(fixedrange=True),
+    dragmode=False,
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="center",
+        x=0.5,
+        title=None,
+    ),
+    margin=dict(l=10, r=10, t=70, b=20),
+)
+st.plotly_chart(
+    fig_directors,
+    use_container_width=True,
+    theme="streamlit",
+    config={
+        "displayModeBar": False,
+        "scrollZoom": False,
+        "doubleClick": False,
+        "showTips": False,
+    },
+)
+st.dataframe(
+    director_summary[
+        ["project_manager", "project_count", "hours_granted",
+         "hours_incurred", "deviation_hours", "consumption_pct"]
+    ],
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "project_manager": st.column_config.TextColumn("Director de proyecto"),
+        "project_count": st.column_config.NumberColumn("Proyectos"),
+        "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
+        "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
+        "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
+        "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
+    },
+)
+
+st.divider()
+st.subheader("RESUMEN PROYECTOS")
 c1, c2 = st.columns(2)
 c1.metric("Horas concedidas", f"{granted:,.1f} h")
 c2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
