@@ -415,10 +415,13 @@ if view == "risks":
         hover_data={"bonus_count": True, "Horas": ":,.1f"},
         labels={"project_code": "Proyecto", "bonus_count": "Bonos"},
     )
-    # Reduce each horizontal bar to half Plotly’s default grouped-bar thickness.
-    fig_project_risk.update_traces(width=0.2)
+    # Two adjacent bars per project, with a compact gap between projects.
+    # Each bar fills its 0.25-wide group slot; bargroupgap=0 makes them touch.
+    fig_project_risk.update_traces(width=0.25)
     fig_project_risk.update_layout(
-        height=max(330, 48 * len(project_risk) + 130),
+        height=max(270, 30 * len(project_risk) + 120),
+        bargap=0.5,
+        bargroupgap=0,
         xaxis=dict(title="Horas", fixedrange=True, rangemode="tozero"),
         yaxis=dict(title=None, fixedrange=True, autorange="reversed"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02,
