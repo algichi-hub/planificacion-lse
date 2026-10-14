@@ -2,7 +2,7 @@ param(
     [string]$Ct,
     [string]$HoursFile = "data/OOFF_OP_Planif_Terminada.txt",
     [string]$ProjectsFile = "data/Proyectos_Sevilla.csv",
-    [string]$OoffTextoFile = "data/ooff_texto.zip",
+    [string]$OoffTextoFile = "data/ooff_texto.csv",
     [string]$OutputFile = "data/ooff_texto_consolidado.zip",
     [string]$SnapshotDate = (Get-Date -Format "yyyy-MM-dd"),
     [switch]$Help
@@ -21,7 +21,7 @@ PARÁMETROS:
   -Ct             Centro de trabajo obligatorio salvo con -Help (ej. 422).
   -HoursFile      Origen horas; data/OOFF_OP_Planif_Terminada.txt.
   -ProjectsFile   Maestro; data/Proyectos_Sevilla.csv.
-  -OoffTextoFile  Textos ERP; data/ooff_texto.zip.
+  -OoffTextoFile  Textos ERP; data/ooff_texto.csv.
   -OutputFile     ZIP generado; data/ooff_texto_consolidado.zip.
   -SnapshotDate   Fecha de preparación, por defecto hoy (yyyy-MM-dd).
   -Help           Muestra esta ayuda y termina sin procesar archivos.
