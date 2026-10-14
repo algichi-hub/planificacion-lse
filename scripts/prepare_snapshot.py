@@ -86,99 +86,97 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
         raise ValueError(f'Proyectos de Ct. {ct} ausentes del maestro: {missing_projects[:20]}')
     grouped = defaultdict(list)
     issues = Counter()
-    with zipfile.ZipFile(source) as z:
-        members = [x for x in z.infolist() if not x.is_dir()]
-        if len(members) != 1 or not members[0].filename.lower().endswith('.csv'):
-            raise ValueError('El ZIP debe contener exactamente un fichero CSV')
-        with z.open(members[0]) as fp:
-            first = fp.readline().decode('cp1252')
-            fp.seek(0)
-            # Soporta tanto CSV tabular original como informe ERP paginado.
-            # Un informe no contiene la cabecera de 14 campos del CSV plano.
-            report_mode = first.lstrip().startswith('Fecha  :') and (
-                'ÓRDENES DE FABRICACIÓN POR NÚMERO DE ORDEN' in first
-                or 'ÓRDENES DE FABRICACIÓN' in first
-            )
-            if report_mode:
-                issues['source_format_report'] = 1
-                current_order = None
-                current_fields = None
-                for n, raw_bytes in enumerate(fp, 1):
-                    raw = raw_bytes.decode('cp1252').rstrip('\r\n')
-                    line = raw.rstrip(';')
-                    # El export CSV envuelve entre comillas las líneas que
-                    # contienen comillas literales y duplica dichas comillas.
-                    if line.startswith('"') and line.endswith('"'):
-                        line = line[1:-1].replace('""', '"')
-                    stripped = line.strip()
-                    if stripped.startswith('Fecha  :'):
-                        if 'ÓRDENES DE FABRICACIÓN' not in stripped:
-                            raise ValueError(f'Página ERP no reconocida: línea {n}')
-                        continue
-                    if (not stripped or stripped.startswith('Fábrica de Sevilla')
-                        or stripped.startswith(('Orden |', 'fabrc.'))
-                        or stripped.startswith('-------+')
-                        or (stripped and set(stripped) == {'-'})):
-                        continue
-                    header = re.match(r'^\s*(\d{5,9})\|', line)
-                    if header:
-                        parts = line.split('|')
-                        if len(parts) != 11:
-                            raise ValueError(f'Cabecera de OF inválida en línea {n}')
-                        current_order = normalized_order(parts[0])
-                        current_fields = {field: '' for field in HEADERS}
-                        current_fields.update({
-                            'Orden': current_order,
-                            'Articulo': parts[1].strip(),
-                            'Descripcion': parts[2].strip(),
-                            'Subpro': parts[8].strip(),
-                            'Estado': parts[9].strip(),
-                            'Bono': parts[10].strip(),
-                        })
-                        issues['report_order_headers'] += 1
-                        report_text = ''
-                    else:
-                        if current_order is None:
-                            raise ValueError(f'Línea de informe sin OF asociada: {n}')
-                        # El contenido se preserva literalmente y se extrae
-                        # además el texto visible para interpretación.
-                        text_match = re.match(r'^\s{20,}\|(.*?)\|?\s*$', line)
-                        report_text = text_match.group(1).rstrip().rstrip('|').strip() if text_match else ''
-                    issues['source_lines_total'] += 1
-                    if current_order not in selected:
-                        continue
-                    issues['selected_source_lines'] += 1
-                    fields = dict(current_fields)
-                    fields['Texto'] = report_text
-                    grouped[current_order].append({
-                        'source_line_number': n,
-                        'source_raw_line': raw,
-                        'source_order_field': current_order,
-                        'fields': fields,
-                        'embedded_pipe_in_text': False,
-                        'source_format': 'erp_paged_report',
+    if source.suffix.lower() != '.csv':
+        raise ValueError('El origen de textos debe ser un CSV sin comprimir: ooff_texto.csv')
+    with source.open('rb') as fp:
+        first = fp.readline().decode('cp1252')
+        fp.seek(0)
+        # Soporta tanto CSV tabular original como informe ERP paginado.
+        # Un informe no contiene la cabecera de 14 campos del CSV plano.
+        report_mode = first.lstrip().startswith('Fecha  :') and (
+            'ÓRDENES DE FABRICACIÓN POR NÚMERO DE ORDEN' in first
+            or 'ÓRDENES DE FABRICACIÓN' in first
+        )
+        if report_mode:
+            issues['source_format_report'] = 1
+            current_order = None
+            current_fields = None
+            for n, raw_bytes in enumerate(fp, 1):
+                raw = raw_bytes.decode('cp1252').rstrip('\r\n')
+                line = raw.rstrip(';')
+                # El export CSV envuelve entre comillas las líneas que
+                # contienen comillas literales y duplica dichas comillas.
+                if line.startswith('"') and line.endswith('"'):
+                    line = line[1:-1].replace('""', '"')
+                stripped = line.strip()
+                if stripped.startswith('Fecha  :'):
+                    if 'ÓRDENES DE FABRICACIÓN' not in stripped:
+                        raise ValueError(f'Página ERP no reconocida: línea {n}')
+                    continue
+                if (not stripped or stripped.startswith('Fábrica de Sevilla')
+                    or stripped.startswith(('Orden |', 'fabrc.'))
+                    or stripped.startswith('-------+')
+                    or (stripped and set(stripped) == {'-'})):
+                    continue
+                header = re.match(r'^\s*(\d{5,9})\|', line)
+                if header:
+                    parts = line.split('|')
+                    if len(parts) != 11:
+                        raise ValueError(f'Cabecera de OF inválida en línea {n}')
+                    current_order = normalized_order(parts[0])
+                    current_fields = {field: '' for field in HEADERS}
+                    current_fields.update({
+                        'Orden': current_order,
+                        'Articulo': parts[1].strip(),
+                        'Descripcion': parts[2].strip(),
+                        'Subpro': parts[8].strip(),
+                        'Estado': parts[9].strip(),
+                        'Bono': parts[10].strip(),
                     })
-            else:
-                for n, raw_bytes in enumerate(fp, 1):
-                    raw = raw_bytes.decode('cp1252')
-                    values, extra = parse_line(raw)
-                    if n == 1:
-                        if tuple(v.strip().rstrip(';') for v in values) != HEADERS:
-                            raise ValueError('Cabecera inesperada en ooff_texto.zip')
-                        continue
-                    issues['source_lines_total'] += 1
-                    order = normalized_order(values[0])
-                    if order not in selected:
-                        continue
-                    issues['selected_source_lines'] += 1
-                    if extra: issues['selected_embedded_pipes'] += 1
-                    grouped[order].append({
-                        'source_line_number': n,
-                        'source_raw_line': raw.rstrip('\r\n'),
-                        'source_order_field': values[0],
-                        'fields': dict(zip(HEADERS, values)),
-                        'embedded_pipe_in_text': extra
-                    })
+                    issues['report_order_headers'] += 1
+                    report_text = ''
+                else:
+                    if current_order is None:
+                        raise ValueError(f'Línea de informe sin OF asociada: {n}')
+                    # El contenido se preserva literalmente y se extrae
+                    # además el texto visible para interpretación.
+                    text_match = re.match(r'^\s{20,}\|(.*?)\|?\s*$', line)
+                    report_text = text_match.group(1).rstrip().rstrip('|').strip() if text_match else ''
+                issues['source_lines_total'] += 1
+                if current_order not in selected:
+                    continue
+                issues['selected_source_lines'] += 1
+                fields = dict(current_fields)
+                fields['Texto'] = report_text
+                grouped[current_order].append({
+                    'source_line_number': n,
+                    'source_raw_line': raw,
+                    'source_order_field': current_order,
+                    'fields': fields,
+                    'embedded_pipe_in_text': False,
+                    'source_format': 'erp_paged_report',
+                })
+        else:
+            for n, raw_bytes in enumerate(fp, 1):
+                raw = raw_bytes.decode('cp1252')
+                values, extra = parse_line(raw)
+                if n == 1:
+                    if tuple(v.strip().rstrip(';') for v in values) != HEADERS:
+                        raise ValueError('Cabecera inesperada en ooff_texto.csv')
+                    continue
+                issues['source_lines_total'] += 1
+                order = normalized_order(values[0])
+                if order not in selected:
+                    continue
+                issues['selected_source_lines'] += 1
+                if extra: issues['selected_embedded_pipes'] += 1
+                grouped[order].append({
+                    'source_line_number': n,
+                    'source_raw_line': raw.rstrip('\r\n'),
+                    'source_order_field': values[0],
+                    'fields': dict(zip(HEADERS, values)),
+                    'embedded_pipe_in_text': extra
+                })
     missing = sorted(selected - set(grouped))
     # Una OF sin expediente de textos sigue siendo una OF válida del ERP.
     # Se genera un JSON vacío y marcado explícitamente para interpretación LLM.
@@ -200,8 +198,8 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                 records = grouped[order]
                 nonempty = sum(bool(x['fields']['Texto'].strip()) for x in records)
                 entry = f'of/{order}.json'
-                dossier = {'order_number':order,'source_file':members[0].filename,
-                           'source_zip_sha256':hashes[source.name],
+                dossier = {'order_number':order,'source_file':source.name,
+                           'source_csv_sha256':hashes[source.name],
                            'source_rows_count':len(records),
                            'missing_in_ooff_texto': order in missing,
                            'missing_description_value': '### SIN DATOS ###' if order in missing else None,
