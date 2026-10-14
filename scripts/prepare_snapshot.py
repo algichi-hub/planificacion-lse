@@ -91,26 +91,183 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
         if len(members) != 1 or not members[0].filename.lower().endswith('.csv'):
             raise ValueError('El ZIP debe contener exactamente un fichero CSV')
         with z.open(members[0]) as fp:
-            for n, raw_bytes in enumerate(fp, 1):
-                raw = raw_bytes.decode('cp1252')
-                values, extra = parse_line(raw)
-                if n == 1:
-                    if tuple(v.strip().rstrip(';') for v in values) != HEADERS:
-                        raise ValueError('Cabecera inesperada en ooff_texto.zip')
-                    continue
-                issues['source_lines_total'] += 1
-                order = normalized_order(values[0])
-                if order not in selected:
-                    continue
-                issues['selected_source_lines'] += 1
-                if extra: issues['selected_embedded_pipes'] += 1
-                grouped[order].append({
-                    'source_line_number': n,
-                    'source_raw_line': raw.rstrip('\r\n'),
-                    'source_order_field': values[0],
-                    'fields': dict(zip(HEADERS, values)),
-                    'embedded_pipe_in_text': extra
-                })
+            first = fp.readline().decode('cp1252')
+            fp.seek(0)
+            # Soporta tanto CSV tabular original como informe ERP paginado.
+            # Un informe no contiene la cabecera de 14 campos del CSV plano.
+            report_mode = first.lstrip().startswith('Fecha  :') and (
+                'ÓRDENES DE FABRICACIÓN POR NÚMERO DE ORDEN' in first
+                or 'ÓRDENES DE FABRICACIÓN' in first
+            )
+            if report_mode:
+                issues['source_format_report'] = 1
+                current_order = None
+                current_fields = None
+                for n, raw_bytes in enumerate(fp, 1):
+                    raw = raw_bytes.decode('cp1252').rstrip('\r\n')
+                    line = raw.rstrip(';')
+                    # El export CSV envuelve entre comillas las líneas que
+                    # contienen comillas literales y duplica dichas comillas.
+                    if line.startswith('"') and line.endswith('"'):
+                        line = line[1:-1].replace('""', '"')
+                    stripped = line.strip()
+                    if stripped.startswith('Fecha  :'):
+                        if 'ÓRDENES DE FABRICACIÓN' not in stripped:
+                            raise ValueError(f'Página ERP no reconocida: línea {n}')
+                        continue
+                    if (not stripped or stripped.startswith('Fábrica de Sevilla')
+                        or stripped.startswith(('Orden |', 'fabrc.'))
+                        or stripped.startswith('-------+')
+                        or (stripped and set(stripped) == {'-'})):
+                        continue
+                    header = re.match(r'^\s*(\d{5,9})\|', line)
+                    if header:
+                        parts = line.split('|')
+                        if len(parts) != 11:
+                            raise ValueError(f'Cabecera de OF inválida en línea {n}')
+                        current_order = normalized_order(parts[0])
+                        current_fields = {field: '' for field in HEADERS}
+                        current_fields.update({
+                            'Orden': current_order,
+                            'Articulo': parts[1].strip(),
+                            'Descripcion': parts[2].strip(),
+                            'Subpro': parts[8].strip(),
+                            'Estado': parts[9].strip(),
+                            'Bono': parts[10].strip(),
+                        })
+                        issues['report_order_headers'] += 1
+                        report_text = ''
+                    else:
+                        if current_order is None:
+                            raise ValueError(f'Línea de informe sin OF asociada: {n}')
+                        # El contenido se preserva literalmente y se extrae
+                        # además el texto visible para interpretación.
+                        text_match = re.match(r'^\s{20,}\|(.*?)\|?\s*    missing = sorted(selected - set(grouped))
+    # Una OF sin expediente de textos sigue siendo una OF válida del ERP.
+    # Se genera un JSON vacío y marcado explícitamente para interpretación LLM.
+    hashes = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (hours,projects,source)}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temp = output.with_name(output.name+'.tmp')
+    idx = io.StringIO()
+    writer = csv.writer(idx, delimiter=';')
+    writer.writerow(['order_number','source_rows','nonempty_text_rows','empty_text_rows','json_entry'])
+    bono_idx = io.StringIO(newline='')
+    bono_writer = csv.writer(bono_idx, delimiter=';', lineterminator='\r\n')
+    bono_writer.writerow(['Bono numero', 'OF numero', 'POS numero'])
+    for bonus_id in sorted(operations):
+        order, pos = operations[bonus_id]
+        bono_writer.writerow([bonus_id, order, pos])
+    try:
+        with zipfile.ZipFile(temp, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+            for order in sorted(selected):
+                records = grouped[order]
+                nonempty = sum(bool(x['fields']['Texto'].strip()) for x in records)
+                entry = f'of/{order}.json'
+                dossier = {'order_number':order,'source_file':members[0].filename,
+                           'source_zip_sha256':hashes[source.name],
+                           'source_rows_count':len(records),
+                           'missing_in_ooff_texto': order in missing,
+                           'missing_description_value': '### SIN DATOS ###' if order in missing else None,
+                           'records':records}
+                z.writestr(entry, json.dumps(dossier, ensure_ascii=False, separators=(',',':')))
+                writer.writerow([order,len(records),nonempty,len(records)-nonempty,entry])
+            manifest = {'purpose':'consolidacion_literal_sin_interpretacion',
+                        'centro_trabajo':ct,'snapshot_date':snapshot_date,
+                        'source_files_sha256':hashes,
+                        'hours_records_selected':hours_rows,
+                        'unique_of_selected':len(selected),
+                        'unique_bonuses_selected':len(operations),
+                        'source_lines_selected':issues['selected_source_lines'],
+                        'selected_embedded_pipe_rows':issues['selected_embedded_pipes'],
+                        'source_lines_total':issues['source_lines_total'],
+                        'json_included':len(selected),'missing_of':missing,
+                        'missing_of_count':len(missing),
+                        'note':'Todas las OF seleccionadas tienen JSON. Si missing_in_ooff_texto es true, el LLM debe escribir exactamente ### SIN DATOS ### para la OF y sus bonos. POS de otros Ct. se preservan para dar contexto.'}
+            z.writestr('indice_of.csv',idx.getvalue().encode('utf-8-sig'))
+            z.writestr('indice_bonos.csv', bono_idx.getvalue().encode('utf-8-sig'))
+            z.writestr('manifiesto.json',json.dumps(manifest, ensure_ascii=False,indent=2))
+        with zipfile.ZipFile(temp) as z:
+            if z.testzip() is not None: raise ValueError('ZIP generado incorrectamente')
+            items=[n for n in z.namelist() if n.startswith('of/') and n.endswith('.json')]
+            if len(items)!=len(selected): raise ValueError('Número de JSON inesperado')
+            with z.open('indice_bonos.csv') as bonus_file:
+                bonus_rows = list(csv.DictReader(
+                    io.TextIOWrapper(bonus_file, encoding='utf-8-sig', newline=''),
+                    delimiter=';'
+                ))
+            if len(bonus_rows) != len(operations):
+                raise ValueError('El índice no contiene todos los bonos')
+            indexed_bonuses = {row['Bono numero'] for row in bonus_rows}
+            if indexed_bonuses != set(operations):
+                raise ValueError('El índice de bonos no coincide con los registros de horas')
+            if any(
+                row['OF numero'] not in selected
+                or row['Bono numero'] != row['OF numero'] + row['POS numero']
+                or len(row['POS numero']) != 4
+                for row in bonus_rows
+            ):
+                raise ValueError('Índice de bonos con claves inválidas')
+            if sum(json.loads(z.read(name))['source_rows_count'] for name in items)!=issues['selected_source_lines']:
+                raise ValueError('No se preservaron todas las líneas seleccionadas')
+            for order in missing:
+                dossier = json.loads(z.read(f'of/{order}.json'))
+                if not dossier['missing_in_ooff_texto'] or dossier['records']:
+                    raise ValueError(f'OF ausente mal representada: {order}')
+        temp.replace(output)
+    finally:
+        if temp.exists(): temp.unlink()
+    return manifest
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--ct', required=True)
+    parser.add_argument('--hours',required=True,type=Path)
+    parser.add_argument('--projects',required=True,type=Path)
+    parser.add_argument('--ooff-texto',required=True,type=Path)
+    parser.add_argument('--output',required=True,type=Path)
+    parser.add_argument('--snapshot-date',required=True)
+    args=parser.parse_args()
+    print(json.dumps(prepare(args.hours,args.projects,args.ooff_texto,args.output,args.ct,args.snapshot_date),ensure_ascii=False,indent=2))
+
+if __name__=='__main__': main()
+, line)
+                        report_text = text_match.group(1).rstrip().rstrip('|').strip() if text_match else ''
+                    issues['source_lines_total'] += 1
+                    if current_order not in selected:
+                        continue
+                    issues['selected_source_lines'] += 1
+                    fields = dict(current_fields)
+                    fields['Texto'] = report_text
+                    grouped[current_order].append({
+                        'source_line_number': n,
+                        'source_raw_line': raw,
+                        'source_order_field': current_order,
+                        'fields': fields,
+                        'embedded_pipe_in_text': False,
+                        'source_format': 'erp_paged_report',
+                    })
+            else:
+                for n, raw_bytes in enumerate(fp, 1):
+                    raw = raw_bytes.decode('cp1252')
+                    values, extra = parse_line(raw)
+                    if n == 1:
+                        if tuple(v.strip().rstrip(';') for v in values) != HEADERS:
+                            raise ValueError('Cabecera inesperada en ooff_texto.zip')
+                        continue
+                    issues['source_lines_total'] += 1
+                    order = normalized_order(values[0])
+                    if order not in selected:
+                        continue
+                    issues['selected_source_lines'] += 1
+                    if extra: issues['selected_embedded_pipes'] += 1
+                    grouped[order].append({
+                        'source_line_number': n,
+                        'source_raw_line': raw.rstrip('\r\n'),
+                        'source_order_field': values[0],
+                        'fields': dict(zip(HEADERS, values)),
+                        'embedded_pipe_in_text': extra
+                    })
     missing = sorted(selected - set(grouped))
     # Una OF sin expediente de textos sigue siendo una OF válida del ERP.
     # Se genera un JSON vacío y marcado explícitamente para interpretación LLM.
