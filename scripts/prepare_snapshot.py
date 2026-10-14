@@ -142,7 +142,44 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                             raise ValueError(f'Línea de informe sin OF asociada: {n}')
                         # El contenido se preserva literalmente y se extrae
                         # además el texto visible para interpretación.
-                        text_match = re.match(r'^\\s{20,}\\|(.*?)\\|?\\s*
+                        text_match = re.match(r'^\s{20,}\|(.*?)\|?\s*$', line)
+                        report_text = text_match.group(1).rstrip().rstrip('|').strip() if text_match else ''
+                    issues['source_lines_total'] += 1
+                    if current_order not in selected:
+                        continue
+                    issues['selected_source_lines'] += 1
+                    fields = dict(current_fields)
+                    fields['Texto'] = report_text
+                    grouped[current_order].append({
+                        'source_line_number': n,
+                        'source_raw_line': raw,
+                        'source_order_field': current_order,
+                        'fields': fields,
+                        'embedded_pipe_in_text': False,
+                        'source_format': 'erp_paged_report',
+                    })
+            else:
+                for n, raw_bytes in enumerate(fp, 1):
+                    raw = raw_bytes.decode('cp1252')
+                    values, extra = parse_line(raw)
+                    if n == 1:
+                        if tuple(v.strip().rstrip(';') for v in values) != HEADERS:
+                            raise ValueError('Cabecera inesperada en ooff_texto.zip')
+                        continue
+                    issues['source_lines_total'] += 1
+                    order = normalized_order(values[0])
+                    if order not in selected:
+                        continue
+                    issues['selected_source_lines'] += 1
+                    if extra: issues['selected_embedded_pipes'] += 1
+                    grouped[order].append({
+                        'source_line_number': n,
+                        'source_raw_line': raw.rstrip('\r\n'),
+                        'source_order_field': values[0],
+                        'fields': dict(zip(HEADERS, values)),
+                        'embedded_pipe_in_text': extra
+                    })
+    missing = sorted(selected - set(grouped))
     # Una OF sin expediente de textos sigue siendo una OF válida del ERP.
     # Se genera un JSON vacío y marcado explícitamente para interpretación LLM.
     hashes = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (hours,projects,source)}
