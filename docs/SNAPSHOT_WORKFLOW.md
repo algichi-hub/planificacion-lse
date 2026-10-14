@@ -22,6 +22,8 @@ Sistema **Planificación LSE**. Ejecutar en Windows PowerShell desde la raíz de
 | `data/OOFF_OP_Planif_Terminada.txt` | ERP horas; permite filtrar operaciones por `Ct.` y formar bonos |
 | `data/Proyectos_Sevilla.csv` | Maestro de proyectos |
 | `data/ooff_texto.zip` | Textos internos originales del ERP (solo preparación) |
+
+El ZIP de textos acepta **dos exportaciones ERP**: el CSV tabular con cabeceras `Orden|Articulo|...|Texto|...`, y el informe paginado `ÓRDENES DE FABRICACIÓN POR NÚMERO DE ORDEN` con textos multilínea en recuadros. El preparador detecta el formato y conserva las líneas de los expedientes seleccionados; no intenta aplicar `parse_line` de 14 columnas al informe paginado. Los formatos no reconocidos siguen siendo errores, y las OF sin correspondencia se marcan `### SIN DATOS ###`.
 | `data/ooff_texto_consolidado.zip` | Salida de preparación; JSON por OF, manifiesto, `indice_of.csv` e `indice_bonos.csv` |
 | `data/ooff_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
 | `data/bono_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
