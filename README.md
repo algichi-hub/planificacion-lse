@@ -2,6 +2,8 @@
 
 **Prompt reutilizable para cualquier agente LLM:** [Interpretación de OF y bonos ERP](docs/LLM_ERP_PROMPT.md). Incluye el caso `### SIN DATOS ###` y el formato obligatorio de ambos CSV.
 
+> **Entrada de textos ERP:** `data/ooff_texto.csv` (CSV sin comprimir). `pre_snapshot.ps1` genera `data/ooff_texto_consolidado.zip` para el LLM. El ZIP original `ooff_texto.zip` ya no es la entrada predeterminada.
+
 > **Flujo operativo actual:** para preparar OF y bonos, validar los cuatro archivos e importar snapshots por centro de trabajo, consulta [Guía de preparación y carga de snapshots](docs/SNAPSHOT_WORKFLOW.md). Los comandos históricos de importación de esta V0 se conservan solo como referencia y no describen el proceso vigente.
 
 V0 de un sistema de control de horas basado en SQL para sustituir el resumen ejecutivo manual.
