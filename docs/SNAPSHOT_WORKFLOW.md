@@ -21,9 +21,9 @@ Sistema **Planificación LSE**. Ejecutar en Windows PowerShell desde la raíz de
 |---|---|
 | `data/OOFF_OP_Planif_Terminada.txt` | ERP horas; permite filtrar operaciones por `Ct.` y formar bonos |
 | `data/Proyectos_Sevilla.csv` | Maestro de proyectos |
-| `data/ooff_texto.zip` | Textos internos originales del ERP (solo preparación) |
+| `data/ooff_texto.csv` | Textos internos originales del ERP (solo preparación) |
 
-El ZIP de textos acepta **dos exportaciones ERP**: el CSV tabular con cabeceras `Orden|Articulo|...|Texto|...`, y el informe paginado `ÓRDENES DE FABRICACIÓN POR NÚMERO DE ORDEN` con textos multilínea en recuadros. El preparador detecta el formato y conserva las líneas de los expedientes seleccionados; no intenta aplicar `parse_line` de 14 columnas al informe paginado. Los formatos no reconocidos siguen siendo errores, y las OF sin correspondencia se marcan `### SIN DATOS ###`.
+El CSV de textos sin comprimir acepta **dos formatos de exportación ERP**: el CSV tabular con cabeceras `Orden|Articulo|...|Texto|...`, y el informe paginado `ÓRDENES DE FABRICACIÓN POR NÚMERO DE ORDEN` con textos multilínea en recuadros. El preparador lee directamente el CSV y detecta el formato y conserva las líneas de los expedientes seleccionados; no intenta aplicar `parse_line` de 14 columnas al informe paginado. Los formatos no reconocidos siguen siendo errores, y las OF sin correspondencia se marcan `### SIN DATOS ###`.
 | `data/ooff_texto_consolidado.zip` | Salida de preparación; JSON por OF, manifiesto, `indice_of.csv` e `indice_bonos.csv` |
 | `data/ooff_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
 | `data/bono_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
@@ -31,6 +31,9 @@ El ZIP de textos acepta **dos exportaciones ERP**: el CSV tabular con cabeceras 
 Los archivos `data/*.zip`, `data/*.csv` y `data/*.txt` se excluyen del repositorio mediante `.gitignore`.
 
 ## 1. Preparación: pre_snapshot.ps1
+
+El fichero de textos original se guarda **sin comprimir**, con nombre `data/ooff_texto.csv`. No es necesario crear un ZIP. La salida para el agente LLM **sí** sigue siendo `data/ooff_texto_consolidado.zip`. Para comprobar sintaxis antes de ejecutar: `python -m py_compile .\scripts\prepare_snapshot.py`.
+
 
 ```powershell
 .\scripts\pre_snapshot.ps1 -Help
@@ -45,7 +48,7 @@ Parámetros:
 | `-SnapshotDate` | Fecha Windows (yyyy-MM-dd) | Fecha indicada en el manifiesto |
 | `-HoursFile` | `data/OOFF_OP_Planif_Terminada.txt` | Export de horas |
 | `-ProjectsFile` | `data/Proyectos_Sevilla.csv` | Maestro |
-| `-OoffTextoFile` | `data/ooff_texto.zip` | Texto ERP original |
+| `-OoffTextoFile` | `data/ooff_texto.csv` | Texto ERP original |
 | `-OutputFile` | `data/ooff_texto_consolidado.zip` | ZIP destino |
 | `-Help` | — | Muestra la ayuda sin procesar datos |
 
@@ -57,7 +60,7 @@ Ejemplo de fecha explícita:
 
 El script selecciona las OF que tengan registros de horas en el Ct elegido, pero conserva **todas las líneas textuales** de cada OF para que el modelo pueda interpretar su contexto, incluyendo operaciones de otros Ct. El ZIP integra el inventario autoritativo de bonos reales del Ct (`indice_bonos.csv`). No asigna ni interpreta descripciones y no utiliza credenciales de Neon.
 
-**OF ausentes del ZIP de textos:** no se detiene el proceso. Se genera un JSON por cada OF seleccionada, aunque falte en `ooff_texto.zip`, con `records: []`, `missing_in_ooff_texto: true` y `missing_description_value: "### SIN DATOS ###"`. El manifiesto enumera esas OF en `missing_of`. Una ausencia individual no equivale a un ZIP corrupto; los errores de estructura que impiden interpretar las claves siguen siendo bloqueantes.
+**OF ausentes del ZIP de textos:** no se detiene el proceso. Se genera un JSON por cada OF seleccionada, aunque falte en `ooff_texto.csv`, con `records: []`, `missing_in_ooff_texto: true` y `missing_description_value: "### SIN DATOS ###"`. El manifiesto enumera esas OF en `missing_of`. Una ausencia individual no equivale a un ZIP corrupto; los errores de estructura que impiden interpretar las claves siguen siendo bloqueantes.
 
 ## 2. Interpretación LLM
 
