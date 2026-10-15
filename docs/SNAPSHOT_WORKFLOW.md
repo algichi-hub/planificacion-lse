@@ -141,14 +141,14 @@ Consultar `-Help` en cualquiera de los scripts para ver sus parámetros en la te
 
 ## 7. Retirada segura de un Ct y fecha de Neon
 
-La utilidad independiente `scripts/delete_snapshot_ct.ps1` elimina las filas de `fact_hours` de un único Ct y fecha mediante transacción, y retira las descripciones de OF/bonos vinculadas exclusivamente a ese Ct. **Por defecto es una simulación sin escrituras.**
+La utilidad independiente `scripts/delete_snapshot.ps1` elimina las filas de `fact_hours` de un único Ct y fecha mediante transacción, y retira las descripciones de OF/bonos vinculadas exclusivamente a ese Ct. **Por defecto es una simulación sin escrituras.**
 
 ```powershell
 # 1. Vista previa obligatoria en la práctica
-.\scripts\delete_snapshot_ct.ps1 -Ct 422 -SnapshotDate "2026-10-15"
+.\scripts\delete_snapshot.ps1 -Ct 422 -SnapshotDate "2026-10-15"
 
 # 2. Borrado REAL, solo si la vista previa es correcta y está autorizado
-.\scripts\delete_snapshot_ct.ps1 -Ct 422 -SnapshotDate "2026-10-15" -Execute -Confirm "ELIMINAR:422:2026-10-15"
+.\scripts\delete_snapshot.ps1 -Ct 422 -SnapshotDate "2026-10-15" -Execute -Confirm "ELIMINAR:422:2026-10-15"
 ```
 
 **Precauciones:** requiere `DATABASE_URL`. La herramienta no modifica tablas SQL, vistas, índices ni otros snapshots. No borra proyectos maestros, porque son globales y pueden pertenecer a otras fechas o Ct. `imports` carece de columna Ct: sus filas de esa fecha se borran **solo cuando ya no existían horas de otros Ct en la fecha antes del borrado**; de lo contrario se conservan como metadatos compartidos. Del mismo modo, una OF o bono que figure en otro Ct de esa fecha mantiene su descripción.
