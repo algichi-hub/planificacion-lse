@@ -1,11 +1,41 @@
 param(
-    [Parameter(Mandatory=$true)][string]$Ct,
-    [Parameter(Mandatory=$true)][string]$SnapshotDate,
+    [string]$Ct,
+    [string]$SnapshotDate,
     [switch]$ValidateOnly,
     [switch]$Execute,
-    [switch]$Confirm
+    [switch]$Confirm,
+    [switch]$Help
 )
 $ErrorActionPreference = "Stop"
+if ($Help) {
+    @'
+ELIMINACION SEGURA DE SNAPSHOT EN NEON POR CENTRO Y FECHA
+
+USO:
+  .\scripts\delete_snapshot.ps1 -Ct 422 -SnapshotDate "2026-10-15" -ValidateOnly
+  .\scripts\delete_snapshot.ps1 -Ct 422 -SnapshotDate "2026-10-15" -Execute -Confirm
+  .\scripts\delete_snapshot.ps1 -Help
+
+PARAMETROS:
+  -Ct             Centro de trabajo (obligatorio excepto con -Help).
+  -SnapshotDate   Fecha exacta YYYY-MM-DD (obligatoria excepto con -Help).
+  -ValidateOnly   Simula y muestra registros afectados, sin eliminar nada.
+  -Execute        Autoriza ejecutar el borrado real; exige -Confirm.
+  -Confirm        Confirma explicitamente el borrado; exige -Execute.
+  -Help           Muestra esta ayuda y finaliza sin conectar a Neon.
+
+SEGURIDAD:
+  Requiere DATABASE_URL excepto con -Help.
+  Sin modo explicito, o combinando -ValidateOnly con -Execute/-Confirm,
+  se rechaza la operacion.
+  Las tablas de proyectos y los registros compartidos con otros Ct se conservan.
+  El borrado real se ejecuta en una transaccion; no modifica otros snapshots.
+'@ | Write-Host
+    return
+}
+if ([string]::IsNullOrWhiteSpace($Ct) -or [string]::IsNullOrWhiteSpace($SnapshotDate)) {
+    throw "Debes indicar -Ct y -SnapshotDate. Ejecuta -Help para ver el uso."
+}
 
 if ($ValidateOnly -and ($Execute -or $Confirm)) {
     throw "-ValidateOnly no puede combinarse con -Execute ni -Confirm."
