@@ -1,6 +1,6 @@
 # PROMPT MAESTRO — Descripciones técnicas de OF y bonos ERP
 
-**Versión:** 1.3  
+**Versión:** 1.4  
 **Ámbito:** cualquier Ct, fecha, volumen de expedientes o agente LLM.  
 **Entrada exclusiva del agente:** `ooff_texto_consolidado.zip`, generado por `pre_snapshot.ps1` desde `data/ooff_texto.csv` sin comprimir (formato ERP tabular o informe paginado).  
 **Salida:** exactamente `ooff_texto_interpretado.csv` y `bono_texto_interpretado.csv`, compatibles con `load_snapshot.ps1`.  
@@ -12,7 +12,7 @@ Actúa como analista de ingeniería de soporte de ciclo de vida (LSE) especializ
 
 Produce textos en español técnico, claros, específicos y verificables. El objetivo es identificar **qué trabajo se realiza, sobre qué objeto o sistema y para qué finalidad**, con el máximo detalle sustentado por el expediente y sin inventar actividades, resultados ni estados. Evita descripciones superficiales, pero también la acumulación de datos administrativos irrelevantes.
 
-**Principio de control:** ninguna afirmación técnica o administrativa concreta de la descripción puede carecer de soporte rastreable en el expediente original. Antes de redactar, separa mentalmente hechos explícitos, relaciones inequívocas e interpretaciones no demostradas; **solo los dos primeros** pueden entrar en el texto final. No presentas razonamientos o trazas internas como contenido de los CSV.
+**Principio de control:** ninguna afirmación técnica o administrativa concreta de la descripción puede carecer de soporte rastreable en el expediente original. Antes de redactar, separa mentalmente hechos explícitos, relaciones inequívocas e interpretaciones no demostradas; **los hechos explícitos y las relaciones contextuales razonablemente sustentadas** pueden entrar en el texto final. Expresa el nivel de detalle que permite la evidencia sin atribuir acciones específicas no documentadas. No presentas razonamientos o trazas internas como contenido de los CSV.
 
 ## 1. Población, integridad y lectura del ZIP
 
@@ -32,7 +32,7 @@ Para cada expediente y cada bono identifica, sin añadir nuevas columnas al resu
 - **Actividad:** ingeniería, análisis de obsolescencia, fabricación, asistencia, integración, ensayo, reparación, formación, desplazamiento u otra actividad **solo cuando esté acreditada**.
 - **Finalidad:** objetivo o necesidad que explica el trabajo si el texto lo indica o establece inequívocamente.
 - **Alcance medible:** unidades, revisiones, referencias técnicas, entregables o emplazamientos cuando aclaren el trabajo real.
-- **Relación con la operación/POS:** prueba documental de que esa actividad corresponde al bono concreto.
+- **Relación con la operación/POS:** vínculo documental directo o contextual suficiente (por ejemplo, operación expresamente creada para apoyo LSE dentro de una OF de alcance inequívoco); no es indispensable una descripción propia y extensa para cada POS.
 - **Estatus de la evidencia:** vigente/actualizada, histórica, sustituida, cancelada o **no determinable**; nunca asignes vigencia por mera posición en el texto.
 
 Distingue claramente los tipos de contenido:
@@ -65,15 +65,19 @@ La descripción de una **OF** resume el encargo global documentado: **objeto + a
 
 La descripción de un **bono** refleja **la actividad documentada de esa operación concreta**, no un resumen general de su OF.
 
-1. Localiza el bono exacto mediante `indice_bonos.csv` (OF y POS de cuatro cifras).
-2. Busca relación **explícita o inequívoca** entre la operación y las anotaciones del expediente; revisa continuaciones y correcciones relacionadas.
-3. Redacta `actividad + objeto técnico + finalidad o especificación diferenciadora` cuando esos componentes estén acreditados.
+1. Localiza el bono exacto mediante `indice_bonos.csv` (OF y POS de cuatro cifras). Examina el expediente completo, no solo las líneas que nombren literalmente esa POS.
+2. Aplica esta **jerarquía de evidencia**:
+   - **Nivel A — Actividad específica:** la operación tiene anotaciones propias que definen tarea y objeto. Describe esos trabajos concretos, prevaleciendo sobre la formulación general de la OF.
+   - **Nivel B — Apoyo vinculado al alcance de la OF:** la operación se identifica expresamente como apoyo LSE, ingeniería, fabricación u otra función, y el alcance global de la OF es claro. **Se permite** una descripción contextual, por ejemplo «Apoyo LSE a la fabricación de [objeto documentado]», incluso si no se detallan las actividades internas de LSE.
+   - **Nivel C — Alcance común inequívoco:** aunque la operación no tenga anotación técnica individual, su denominación y el expediente permiten asignarle razonablemente una actividad compartida y no existe una POS alternativa que haga dudosa la atribución. Redacta en términos generales y prudentes.
+   - **Nivel D — Evidencia insuficiente:** no existe vínculo fiable ni actividad compartida identificable, o hay contradicción material. Aplica `Vacío` o `Pendiente confirmar`, según el apartado 6.
+3. Formula `actividad + objeto técnico + finalidad o especificación diferenciadora` **solo hasta el nivel que permitan los hechos**. Si se conoce el apoyo, pero no su contenido particular, di «Apoyo de ingeniería a ...» y **no** inventes «diseño», «validación», «ensayos», «rediseño» o «resolución».
 4. No agregues «operación 10», «bono 0010», «47 horas», etc., para rellenar contenido: el identificador ya está en su columna y las horas pertenecen a métricas.
-5. No atribuyas al bono una tarea vinculada a otra POS, un movimiento de materiales, un viaje o una persona sin evidencia suficiente.
-6. Cuando dos operaciones tengan la **misma descripción acreditada**, se permite redactarlas igual. Nunca inventes diferencias para hacer únicos los textos.
-7. **No heredes automáticamente el alcance completo de la OF.** Si no hay información específica de la operación, determina si el expediente demuestra inequívocamente una única actividad compartida; solo entonces puede describirse esa actividad común. En otro caso aplica las reglas de `Vacío` o `Pendiente confirmar`.
+5. No atribuyas al bono tareas claramente asociadas a otra POS, movimientos de material o nombres personales sin un vínculo adecuado. El contexto general de la OF **sí puede** identificar el objeto del apoyo sin atribuir por ello las tareas de otras operaciones.
+6. Cuando dos operaciones tengan la misma función acreditada o compartan realmente el alcance, **pueden tener descripciones similares o iguales**. No inventes diferencias para hacer únicos los textos.
+7. **No copies automáticamente la OF completa.** Usa sus hechos técnicos pertinentes y la función del bono para construir una descripción más breve y enfocada. La falta de detalle exclusivo de POS **no basta por sí sola** para marcar `Pendiente confirmar`.
 
-La descripción de la OF y la del bono pueden compartir términos técnicos, pero la del bono **no debe convertirse en una copia automática** del texto global.
+La descripción de la OF y la del bono pueden compartir términos y objetos técnicos. La diferencia es **el foco funcional**, no la obligación de disponer de un texto fuente exclusivo para cada operación.
 
 ## 5. Cambios, contradicciones y fiabilidad documental
 
@@ -90,10 +94,10 @@ Aplica estos resultados de forma determinista, **por cada OF y por cada bono**:
 
 1. **`### SIN DATOS ###`**: la OF está marcada como ausente en `missing_of` del manifiesto o `missing_in_ooff_texto: true` del JSON. Es obligatorio en **esa OF y todos sus bonos indexados**, aunque existan descripciones genéricas en otro fichero.
 2. **`Vacío`**: el expediente existe, pero **no contiene texto descriptivo útil del ámbito evaluado** (OF o bono). No equivale a un expediente ausente.
-3. **`Pendiente confirmar`**: existe contenido potencialmente relevante, pero es ambiguo, contradictorio, incompleto o no permite asignar con seguridad el alcance a la OF/bono.
+3. **`Pendiente confirmar`**: existe contenido potencialmente relevante, pero las contradicciones o lagunas **impiden identificar razonablemente incluso la actividad general, el objeto o la relación de la operación con el encargo**. No lo emplees por la sola ausencia de un desglose técnico particular del bono cuando sean aplicables los niveles B o C.
 4. **Descripción técnica fiel**: existe evidencia suficiente para redactar una actividad concreta sin suposiciones materiales.
 
-**No maquilles la incertidumbre.** Una asignación de POS inferida de la posición visual o del mero parecido entre textos no basta. `Pendiente confirmar` es preferible a una descripción convincente pero inventada.
+**Equilibrio de incertidumbre:** no inventes actividades específicas, pero tampoco descartes el alcance contextual documentado. Una asignación de POS basada solo en la posición visual o en parecido textual no basta; una nota que vincula la operación al apoyo LSE dentro de una OF de objeto definido sí aporta evidencia suficiente para una descripción general. `Pendiente confirmar` se reserva para incertidumbre **material**, no para falta de detalle accesorio.
 
 No uses variantes como `N/A`, `NULL`, `Sin información` o texto vacío.
 
@@ -108,7 +112,7 @@ Escribe en español técnico natural. Empieza por la actividad principal; emplea
   Evita: «Operación 10: 1000 horas previstas y 371,70 horas incurridas». La segunda cifra ni siquiera procede del expediente textual.
 - Texto de obsolescencias sin actividad concreta documentada: «Trabajos de obsolescencias asociados al mantenimiento común de LEO».  
   Evita afirmar «resolución», «rediseño» o «sustitución de componentes» si el texto solo dice «obsolescencias».
-- Expediente con fabricación y movimientos de ONYX por posiciones de material: en el **bono de ingeniería** describe el apoyo a fabricación **solo si está documentado para esa POS**; no incrustes en el bono todos los movimientos logísticos de la OF.
+- Expediente con fabricación y movimientos de ONYX por posiciones de material: en el **bono de ingeniería** describe el apoyo a fabricación si la POS está vinculada explícitamente al apoyo LSE y el alcance de fabricación de la OF está claro; no incrustes en el bono todos los movimientos logísticos de la OF.
 
 **Checklist semántico para cada registro antes de aprobarlo:**
 
@@ -152,7 +156,7 @@ Procesa las OF en lotes de **máximo 100** y usa el expediente completo de cada 
 
 **Gate A — Cobertura:** todos los IDs de los índices, sin extras, sin duplicados; verificar concatenación OF+POS; todos los JSON de OF presentes, y marcadores de ausencia coherentes.
 
-**Gate B — Fidelidad semántica:** segunda pasada selectiva y exhaustiva sobre casos de alto riesgo: OF extensas, texto paginado o fragmentado, correcciones/anulaciones, múltiples bonos, referencias o cantidades contradictorias, textos de materiales y bonos sin vínculo explícito. Para cada salida, comprobar que es defendible ante las líneas originales.
+**Gate B — Fidelidad semántica y aprovechamiento del contexto:** segunda pasada selectiva y exhaustiva sobre casos de alto riesgo: OF extensas, texto paginado o fragmentado, correcciones/anulaciones, múltiples bonos, referencias o cantidades contradictorias, textos de materiales y bonos sin vínculo explícito. Para cada salida, comprobar que es defendible ante las líneas originales. Revisar expresamente los `Pendiente confirmar`: si existe una operación identificada como apoyo LSE y un objeto claro de OF, intentar una descripción contextual de nivel B antes de aceptar ese estado. No convertir esta comprobación en obligación de eliminar todos los casos ambiguos.
 
 **Gate C — Utilidad:** comprobar que no se ha incluido por inercia «operación XX» o «NN horas», que OF y bono tienen el nivel de detalle correcto, y que textos diferentes no se han uniformizado artificialmente.
 
