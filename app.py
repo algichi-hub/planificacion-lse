@@ -34,13 +34,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 view = str(st.query_params.get("view", "home")).lower()
-if view not in {"home", "risks"}:
+if view not in {"home", "risks", "eac"}:
     view = "home"
 
 st.title(
     "Planificación"
     if view == "home"
-    else "Análisis de riesgos"
+    else ("Análisis de riesgos" if view == "risks" else "EAC · ETC trimestrales")
 )
 
 # Material Symbols font for the bottom navigation icons.
@@ -72,6 +72,10 @@ bottom_nav = st.components.v2.component(
         <a href="?view=risks" data-view="risks">
             <span class="icon">manage_search</span>
             <span>Riesgos</span>
+        </a>
+        <a href="?view=eac" data-view="eac">
+            <span class="icon">edit_note</span>
+            <span>EAC</span>
         </a>
     </nav>
     """,
@@ -162,6 +166,11 @@ def query(sql: str, params=()) -> pd.DataFrame:
     with psycopg.connect(DATABASE_URL, connect_timeout=10) as conn:
         return pd.read_sql_query(sql, conn, params=params)
 
+
+if view == "eac":
+    from eac_board import render
+    render(DATABASE_URL)
+    st.stop()
 
 try:
     snapshots = query(
