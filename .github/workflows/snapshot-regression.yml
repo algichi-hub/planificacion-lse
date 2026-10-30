@@ -1,0 +1,17 @@
+name: Snapshot regression
+on:
+  push:
+    branches: [v0/sql-dashboard]
+  workflow_dispatch:
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile Python scripts
+        run: python -m compileall -q scripts tests
+      - name: Run snapshot regression tests
+        run: python -m unittest discover -s tests -p 'test_prepare_snapshot.py' -v
