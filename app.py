@@ -40,7 +40,7 @@ if view not in {"home", "risks", "eac"}:
 st.title(
     "Planificación"
     if view == "home"
-    else ("Análisis de riesgos" if view == "risks" else "EAC · ETC trimestrales")
+    else ("Análisis de riesgos" if view == "risks" else "ETC trimestrales")
 )
 
 # Material Symbols font for the bottom navigation icons.
