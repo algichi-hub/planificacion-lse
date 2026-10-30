@@ -182,3 +182,11 @@ El propio importador crea/actualiza el esquema SQL antes de cargar los datos.
 - `.streamlit/secrets.toml` está excluido de Git.
 - Streamlit Cloud debe recibir `DATABASE_URL` únicamente mediante su gestor de Secrets.
 - Los exports ERP bajo `data/\*.txt`, `data/\*.csv` y `data/\*.xlsx` están excluidos del repositorio.
+
+## Tablas compatibles con Excel español
+
+En todas las tablas de consulta de Home, Riesgos, ETC y futuros tableros,
+utilizar `excel_compat.excel_copy_frame` para la representación mostrada por
+`st.dataframe`. Permite copiar rangos con **coma decimal y sin separador de
+miles**, sin modificar el dato numérico de cálculos o de Neon. No aplicar a
+`st.data_editor`. Convención y ejemplos: [docs/EXCEL_COPY_TABLES.md](docs/EXCEL_COPY_TABLES.md).
