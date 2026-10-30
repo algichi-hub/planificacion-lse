@@ -308,9 +308,9 @@ def render(url):
             "project_code": st.column_config.TextColumn("Proyecto"),
             "description": st.column_config.TextColumn("Descripción"),
             "management_group": st.column_config.TextColumn("Director"),
-            "etc_hours": st.column_config.NumberColumn("ETC", format="%.2f h"),
-            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.2f h"),
-            "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.2f h"),
+            "etc_hours": st.column_config.NumberColumn("ETC", format="localized"),
+            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="localized"),
+            "hours_granted": st.column_config.NumberColumn("Concedidas", format="localized"),
         },
     )
 
