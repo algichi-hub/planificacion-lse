@@ -55,6 +55,16 @@ st.markdown(
     [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
         padding-top: 0.55rem;
     }
+    /* Contorno de filtros coherente con los expanders de Streamlit.
+       La variable sigue automáticamente el borde del tema claro/oscuro. */
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div,
+    [data-testid="stDateInput"] [data-baseweb="input"] > div,
+    [data-testid="stNumberInput"] [data-baseweb="input"] > div,
+    [data-testid="stTextInput"] [data-baseweb="input"] > div,
+    [data-testid="stTextArea"] [data-baseweb="textarea"] {
+        border: 1px solid var(--st-border-color, #E5E7EB);
+    }
     /* Exclusivo para exportaciones CSV, sin alterar otros botones ni el tema. */
     div[class*="st-key-csv_"] button {
         background-color: #217346 !important;
