@@ -395,7 +395,7 @@ def chart(frame, category):
                 title=None, fixedrange=True, tickmode="array",
                 tickvals=ordered_codes,
                 ticktext=[code.split(" ", 1)[0] for code in ordered_codes],
-                tickangle=-90, automargin=True,
+                automargin=True,
             ),
             yaxis=dict(title=None, fixedrange=True, rangemode="tozero"),
         )
