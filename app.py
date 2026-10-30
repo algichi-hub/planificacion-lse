@@ -533,6 +533,9 @@ if view == "risks":
                 "deviation_hours", "consumption_pct"
             ]
         ]),
+        on_select="rerun",
+        selection_mode="multi-cell",
+        key="select_riesgos_bonos",
         use_container_width=True,
         hide_index=True,
         column_config={
@@ -685,7 +688,10 @@ st.dataframe(
         ["project_manager", "project_count", "hours_granted",
          "hours_incurred", "deviation_hours", "consumption_pct"]
     ]),
-    use_container_width=True,
+    on_select="rerun",
+        selection_mode="multi-cell",
+        key="select_home_directores",
+        use_container_width=True,
     hide_index=True,
     column_config={
         "project_manager": st.column_config.TextColumn("Director de proyecto"),
@@ -772,7 +778,10 @@ st.dataframe(
             "remaining_hours"
         ]
     ]),
-    use_container_width=True,
+    on_select="rerun",
+        selection_mode="multi-cell",
+        key="select_home_proyectos",
+        use_container_width=True,
     hide_index=True,
     column_config={
         "project_code": st.column_config.TextColumn("Proyecto"),
@@ -929,6 +938,9 @@ if selected_project != "Todos":
                 "deviation_hours", "remaining_hours"
             ]
         ]),
+        on_select="rerun",
+        selection_mode="multi-cell",
+        key="select_home_ordenes",
         use_container_width=True,
         hide_index=True,
         column_config={
@@ -1096,6 +1108,9 @@ if selected_project != "Todos" and selected_order != "Todas":
                 "remaining_hours"
             ]
         ]),
+        on_select="rerun",
+        selection_mode="multi-cell",
+        key="select_home_bonos",
         use_container_width=True,
         hide_index=True,
         column_config={
