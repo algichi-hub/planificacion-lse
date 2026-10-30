@@ -37,9 +37,9 @@ class ExcelCopyTests(unittest.TestCase):
             "hours_incurred": [Decimal("14127.76"), Decimal("228.78")],
         })
         raw = excel_csv_bytes(frame)
-        self.assertTrue(raw.startswith(b"\\xef\\xbb\\xbf"))
+        self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))
         content = raw.decode("utf-8-sig")
-        self.assertTrue(content.startswith("project_code;description;etc_hours;hours_incurred\\r\\n"))
+        self.assertTrue(content.startswith("project_code;description;etc_hours;hours_incurred\r\n"))
         self.assertIn("DRM001;PLANES LSA, DATOS SIGLE;8077,00;14127,76", content)
         self.assertIn("DRM002;GARANTÍAS DRAGÓN;;228,78", content)
         import csv
