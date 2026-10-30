@@ -49,3 +49,14 @@ def excel_copy_frame(frame: pd.DataFrame, *, precision: dict[str, int] | None = 
             else f"{value:.{digits}f}".replace(".", ",")
         )
     return result
+
+
+def excel_csv_bytes(frame: pd.DataFrame, *, precision: dict[str, int] | None = None) -> bytes:
+    """CSV for Spanish Excel: semicolon columns, decimal comma and UTF-8 BOM.
+
+    The input must be the original dataframe (numeric source values), NOT a
+    dataframe already transformed for display. No index is included.
+    """
+    display = excel_copy_frame(frame, precision=precision)
+    csv_text = display.to_csv(index=False, sep=";", lineterminator="\r\n")
+    return csv_text.encode("utf-8-sig")
