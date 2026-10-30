@@ -299,35 +299,39 @@ def render(url):
     selected_projects = joined.loc[joined["management_group"] == director].copy()
     chart(selected_projects, "project_code")
     # Representación de consulta compatible con Excel; editor ETC continúa numérico.
-    st.dataframe(
-        excel_copy_frame(selected_projects[
-            ["project_code", "description", "management_group",
-             "etc_hours", "hours_incurred", "hours_granted"]
-        ]),
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="multi-cell",
-        key="select_etc_proyectos",
-        use_container_width=True,
-        column_config={
-            "project_code": st.column_config.TextColumn("Proyecto"),
-            "description": st.column_config.TextColumn("Descripción"),
-            "management_group": st.column_config.TextColumn("Director"),
-            "etc_hours": st.column_config.TextColumn("ETC"),
-            "hours_incurred": st.column_config.TextColumn("Incurridas"),
-            "hours_granted": st.column_config.TextColumn("Concedidas"),
-        },
-    )
-    st.download_button(
-        "Descargar CSV · Excel español",
-        data=excel_csv_bytes(selected_projects[
-            ["project_code", "description", "management_group",
-             "etc_hours", "hours_incurred", "hours_granted"]
-        ]),
-        file_name="etc_proyectos.csv",
-        mime="text/csv; charset=utf-8",
-        key="csv_etc_proyectos",
-    )
+    @st.fragment
+    def render_selection_etc_proyectos():
+        st.dataframe(
+            excel_copy_frame(selected_projects[
+                ["project_code", "description", "management_group",
+                 "etc_hours", "hours_incurred", "hours_granted"]
+            ]),
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="multi-cell",
+            key="select_etc_proyectos",
+            use_container_width=True,
+            column_config={
+                "project_code": st.column_config.TextColumn("Proyecto"),
+                "description": st.column_config.TextColumn("Descripción"),
+                "management_group": st.column_config.TextColumn("Director"),
+                "etc_hours": st.column_config.TextColumn("ETC"),
+                "hours_incurred": st.column_config.TextColumn("Incurridas"),
+                "hours_granted": st.column_config.TextColumn("Concedidas"),
+            },
+        )
+        st.download_button(
+            "Descargar CSV · Excel español",
+            data=excel_csv_bytes(selected_projects[
+                ["project_code", "description", "management_group",
+                 "etc_hours", "hours_incurred", "hours_granted"]
+            ]),
+            file_name="etc_proyectos.csv",
+            mime="text/csv; charset=utf-8",
+            key="csv_etc_proyectos",
+        )
+
+    render_selection_etc_proyectos()
 
 
 def chart(frame, category):
