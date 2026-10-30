@@ -297,20 +297,27 @@ def render(url):
     )
     selected_projects = joined.loc[joined["management_group"] == director].copy()
     chart(selected_projects, "project_code")
+    # Solo tabla de consulta: mostrar y copiar caracteres decimales españoles.
+    # Conservamos joined/selected_projects como números para cálculos y gráficos.
+    excel_view = selected_projects[
+        ["project_code", "description", "management_group",
+         "etc_hours", "hours_incurred", "hours_granted"]
+    ].copy()
+    for column in ("etc_hours", "hours_incurred", "hours_granted"):
+        excel_view[column] = excel_view[column].map(
+            lambda value: "" if pd.isna(value) else f"{value:.2f}".replace(".", ",")
+        )
     st.dataframe(
-        selected_projects[
-            ["project_code", "description", "management_group",
-             "etc_hours", "hours_incurred", "hours_granted"]
-        ],
+        excel_view,
         hide_index=True,
         use_container_width=True,
         column_config={
             "project_code": st.column_config.TextColumn("Proyecto"),
             "description": st.column_config.TextColumn("Descripción"),
             "management_group": st.column_config.TextColumn("Director"),
-            "etc_hours": st.column_config.NumberColumn("ETC", format="localized"),
-            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="localized"),
-            "hours_granted": st.column_config.NumberColumn("Concedidas", format="localized"),
+            "etc_hours": st.column_config.TextColumn("ETC"),
+            "hours_incurred": st.column_config.TextColumn("Incurridas"),
+            "hours_granted": st.column_config.TextColumn("Concedidas"),
         },
     )
 
