@@ -9,7 +9,7 @@ showSidebarBorder = true
 
 [theme.light]
 primaryColor = "#FF4B4B"
-backgroundColor = "#FFFFFF"
+backgroundColor = "#BFE8FF"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#111827"
 borderColor = "#E5E7EB"
