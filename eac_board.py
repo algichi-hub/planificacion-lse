@@ -181,7 +181,7 @@ def render(url):
         return
     choices = {int(x.id):f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
                for x in snapshots.itertuples(index=False)}
-    selected = st.selectbox("Snapshot ETC", list(choices), format_func=lambda v:choices[v])
+    selected = st.selectbox("Snapshot ETC seleccionado", list(choices), index=0, format_func=lambda v:choices[v])
     try:
         real_dates = list_real_snapshots(url)
     except psycopg.Error as exc:
@@ -191,7 +191,7 @@ def render(url):
         st.warning("No hay snapshots reales disponibles en la BBDD.")
         st.stop()
     real_date = st.selectbox(
-        "Snapshot Reales",
+        "Snapshot real seleccionado",
         real_dates,
         index=0,
         format_func=lambda value: value.strftime("%d/%m/%Y"),
@@ -357,11 +357,11 @@ def chart(frame, category):
     )
     fig.update_layout(
         autosize=True,
-        height=max(300, 46 * len(ordered_codes) + 115) if horizontal else 420,
+        height=max(300, 46 * len(ordered_codes) + 115) if horizontal else 465,
         legend=dict(orientation="h", yanchor="bottom", y=1.02,
                     xanchor="center", x=0.5, title=None),
         dragmode=False,
-        margin=dict(l=10, r=10, t=65, b=20),
+        margin=dict(l=0, r=0, t=65, b=95 if not horizontal else 20),
     )
     if horizontal:
         fig.update_layout(
@@ -376,9 +376,9 @@ def chart(frame, category):
                 title=None, fixedrange=True, tickmode="array",
                 tickvals=ordered_codes,
                 ticktext=[code.split(" ", 1)[0] for code in ordered_codes],
-                tickangle=0, automargin=True,
+                tickangle=-90, automargin=True,
             ),
-            yaxis=dict(title="Horas", fixedrange=True, rangemode="tozero"),
+            yaxis=dict(title=None, fixedrange=True, rangemode="tozero"),
         )
     st.plotly_chart(
         fig, use_container_width=True, theme="streamlit",
