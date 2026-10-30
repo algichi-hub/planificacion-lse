@@ -149,9 +149,7 @@ def hours_value(value):
     return decimal
 
 def render(url):
-    st.subheader("EAC · Fotografías ETC trimestrales")
-    st.caption("Datos manuales informativos: independientes de OF y bonos. "
-               "Los directores son agrupaciones de gestión.")
+    st.subheader("Snapshot trimestral")
     try:
         snapshots = list_snapshots(url)
     except psycopg.errors.UndefinedTable:
@@ -161,7 +159,7 @@ def render(url):
         st.error(f"No se puede leer EAC en Neon: {type(exc).__name__}")
         st.stop()
 
-    with st.expander("Nueva fotografía ETC", expanded=snapshots.empty):
+    with st.expander("Nuevo snapshot ETC", expanded=snapshots.empty):
         c1,c2,c3 = st.columns(3)
         year = c1.number_input("Año", min_value=2000,max_value=2200,value=date.today().year,step=1)
         quarter = c2.selectbox("Trimestre", [1,2,3,4], index=(date.today().month-1)//3,
@@ -170,28 +168,27 @@ def render(url):
         if st.button("Crear borrador ETC",type="primary"):
             try:
                 create_snapshot(url,int(year),int(quarter),copy_previous)
-                st.success("Fotografía creada.")
+                st.success("Snapshot creado.")
                 st.rerun()
             except (ValueError,psycopg.Error) as exc:
                 st.error(str(exc))
     if snapshots.empty:
-        st.info("Crea una fotografía para comenzar.")
+        st.info("Crea un snapshot para comenzar.")
         return
     choices = {int(x.id):f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
                for x in snapshots.itertuples(index=False)}
-    selected = st.selectbox("Fotografía ETC", list(choices), format_func=lambda v:choices[v])
+    selected = st.selectbox("Snapshot", list(choices), format_func=lambda v:choices[v])
     status = snapshots.loc[snapshots["id"]==selected,"status"].iloc[0]
     original = load_projects(url,selected)
     if original.empty:
         st.info("Todavía no hay proyectos en el catálogo.")
         return
     groups = sorted(original["management_group"].unique())
-    group = st.selectbox("Agrupación de gestión", ["Todas"]+groups)
+    group = st.selectbox("Agrupación por director", ["Todas"]+groups)
     filtered = original if group=="Todas" else original[original.management_group==group]
     st.metric("ETC registrado · trimestre seleccionado",
               f"{float(original.etc_hours.dropna().sum()):,.2f} h")
-    st.caption(f"{original.etc_hours.notna().sum()} de {len(original)} proyectos tienen ETC registrado. "
-               "El campo vacío representa 'sin dato', no cero.")
+    st.caption(f"{original.etc_hours.notna().sum()} de {len(original)} proyectos tienen ETC registrado.")
     st.subheader("Editar ETC por proyecto")
     editor = filtered[["project_code","description","management_group","etc_hours"]].copy()
     # Float values are only used in the UI; writes are converted back to exact Decimal.
@@ -203,7 +200,7 @@ def render(url):
         column_config={
             "project_code":st.column_config.TextColumn("Proyecto"),
             "description":st.column_config.TextColumn("Descripción"),
-            "management_group":st.column_config.TextColumn("Agrupación"),
+            "management_group":st.column_config.TextColumn("Director"),
             "etc_hours":st.column_config.NumberColumn("ETC (h)",min_value=0,step=0.5,format="%.2f")
         }
     )
@@ -225,56 +222,121 @@ def render(url):
         if st.button("Publicar fotografía ETC",help="La publicación bloquea nuevas ediciones."):
             try:
                 publish(url,selected)
-                st.success("Fotografía publicada.")
+                st.success("Snapshot publicado.")
                 st.rerun()
             except (ValueError,psycopg.Error) as exc:
                 st.error(str(exc))
     else:
-        st.info("Fotografía publicada. Puedes reabrirla para corregir valores; cada cambio queda auditado.")
+        st.info("Snapshot publicado. Puedes reabrirlo para corregir valores.")
         if st.button("Reabrir para editar", help="Permite modificar de nuevo una fotografía publicada."):
             reopen(url,selected)
             st.rerun()
 
     st.divider()
-    st.subheader("Comparación informativa ETC / concedidas / incurridas")
-    on_date=latest_operational_date(url)
+    st.subheader("ETC por director")
+    on_date = latest_operational_date(url)
     if on_date is None:
         st.info("No hay snapshot ERP operativo para comparar.")
         return
-    st.caption(f"ETC {choices[selected]} frente a snapshot ERP del {on_date}. "
-               "ETC es una previsión trimestral, no una concesión formal.")
-    facts=operational_hours(url,on_date)
-    joined=original.merge(facts,on="project_code",how="left")
-    for col in ["hours_granted","hours_incurred"]:
-        joined[col]=pd.to_numeric(joined[col],errors="coerce").fillna(0)
-    joined["etc_hours"]=pd.to_numeric(joined["etc_hours"],errors="coerce")
-    modes=st.tabs(["Agrupaciones de gestión","Proyectos"])
-    with modes[0]:
-        agg=(joined.groupby("management_group",as_index=False)
-             .agg(etc_hours=("etc_hours",lambda x:x.sum(min_count=1)),
-                  hours_granted=("hours_granted","sum"),hours_incurred=("hours_incurred","sum")))
-        chart(agg,"management_group")
-    with modes[1]:
-        chart(joined,"project_code")
-    with st.expander("Auditoría de cambios ETC"):
-        with connection(url) as conn:
-            audit=pd.DataFrame(conn.execute(
-                "SELECT project_code,old_hours,new_hours,changed_at "
-                "FROM eac_project_hours_audit WHERE snapshot_id=%s "
-                "ORDER BY changed_at DESC,id DESC",(selected,)
-            ).fetchall())
-        st.dataframe(audit,hide_index=True,use_container_width=True)
+    st.caption(f"ETC {choices[selected]} · Datos ERP del snapshot {on_date}.")
+    facts = operational_hours(url, on_date)
+    joined = original.merge(facts, on="project_code", how="left")
+    for column in ("hours_granted", "hours_incurred"):
+        joined[column] = pd.to_numeric(joined[column], errors="coerce").fillna(0)
+    joined["etc_hours"] = pd.to_numeric(joined["etc_hours"], errors="coerce")
 
-def chart(frame,category):
-    data=frame.melt(id_vars=[category],value_vars=["etc_hours","hours_granted","hours_incurred"],
-                    var_name="serie",value_name="horas")
-    data["serie"]=data["serie"].map({"etc_hours":"ETC","hours_granted":"Concedidas",
-                                     "hours_incurred":"Incurridas"})
-    data=data.dropna(subset=["horas"])
-    fig=px.bar(data,x=category,y="horas",color="serie",barmode="group",
-               color_discrete_map={"ETC":"#D5A547","Concedidas":"#70B7EA","Incurridas":"#1F4E8C"},
-               labels={category:"Agrupación" if category=="management_group" else "Proyecto",
-                       "horas":"Horas","serie":""})
-    fig.update_layout(legend=dict(orientation="h",yanchor="bottom",y=1.02),
-                      xaxis_tickangle=-25)
-    st.plotly_chart(fig,use_container_width=True)
+    # El resumen completo de directores es independiente del filtro de proyectos.
+    summary = (
+        joined.groupby("management_group", as_index=False)
+        .agg(
+            etc_hours=("etc_hours", lambda x: x.sum(min_count=1)),
+            hours_granted=("hours_granted", "sum"),
+            hours_incurred=("hours_incurred", "sum"),
+        )
+        .sort_values("management_group")
+    )
+    chart(summary, "management_group")
+
+    st.divider()
+    st.subheader("ETC por proyecto")
+    director = st.selectbox(
+        "Agrupación por director",
+        groups,
+        key=f"eac_project_director_{selected}",
+        help="Selecciona la agrupación cuyos proyectos quieres visualizar.",
+    )
+    selected_projects = joined.loc[joined["management_group"] == director].copy()
+    chart(selected_projects, "project_code")
+    st.dataframe(
+        selected_projects[
+            ["project_code", "description", "management_group",
+             "etc_hours", "hours_incurred", "hours_granted"]
+        ],
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "project_code": st.column_config.TextColumn("Proyecto"),
+            "description": st.column_config.TextColumn("Descripción"),
+            "management_group": st.column_config.TextColumn("Director"),
+            "etc_hours": st.column_config.NumberColumn("ETC", format="%.2f h"),
+            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.2f h"),
+            "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.2f h"),
+        },
+    )
+
+
+def chart(frame, category):
+    """Barras agrupadas, ancho completo y códigos compactos en el eje horizontal."""
+    data = frame.melt(
+        id_vars=[category],
+        value_vars=["etc_hours", "hours_incurred", "hours_granted"],
+        var_name="serie", value_name="horas",
+    )
+    data["serie"] = data["serie"].map({
+        "etc_hours": "ETC",
+        "hours_incurred": "Incurridas",
+        "hours_granted": "Concedidas",
+    })
+    data = data.dropna(subset=["horas"])
+    if data.empty:
+        st.info("No hay horas disponibles para este gráfico.")
+        return
+    data[category] = data[category].astype(str)
+    ordered_codes = frame[category].astype(str).tolist()
+    fig = px.bar(
+        data, x=category, y="horas", color="serie", barmode="group",
+        color_discrete_map={
+            "ETC": "#D5A547",
+            "Incurridas": "#1F4E8C",
+            "Concedidas": "#70B7EA",
+        },
+        category_orders={
+            category: ordered_codes,
+            "serie": ["ETC", "Incurridas", "Concedidas"],
+        },
+        labels={
+            category: "Director" if category == "management_group" else "Proyecto",
+            "horas": "Horas", "serie": "",
+        },
+    )
+    fig.update_layout(
+        autosize=True,
+        height=420,
+        xaxis=dict(
+            title=None, fixedrange=True, tickmode="array",
+            tickvals=ordered_codes,
+            ticktext=([code.split(" ", 1)[0] for code in ordered_codes]
+                      if category == "management_group" else ordered_codes),
+            tickangle=0, automargin=True,
+        ),
+        yaxis=dict(title="Horas", fixedrange=True, rangemode="tozero"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="center", x=0.5, title=None),
+        dragmode=False,
+        margin=dict(l=10, r=10, t=65, b=15),
+    )
+    st.plotly_chart(
+        fig, use_container_width=True, theme="streamlit",
+        config={"displayModeBar": False, "scrollZoom": False,
+                "doubleClick": False, "showTips": False},
+    )
