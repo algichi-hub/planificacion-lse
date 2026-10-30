@@ -525,43 +525,47 @@ if view == "risks":
             displayed_risk["order_number"].astype(str) == selected_risk_order
         ]
 
-    st.dataframe(
-        excel_copy_frame(displayed_risk[
-            [
-                "risk_level", "project_code", "bonus_id",
-                "operation_description", "hours_granted", "hours_incurred",
-                "deviation_hours", "consumption_pct"
-            ]
-        ]),
-        on_select="rerun",
-        selection_mode="multi-cell",
-        key="select_riesgos_bonos",
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "risk_level": st.column_config.TextColumn("Riesgo"),
-            "project_code": st.column_config.TextColumn("Proyecto"),
-            "bonus_id": st.column_config.TextColumn("Bono"),
-            "operation_description": st.column_config.TextColumn("Descripción"),
-            "hours_granted": st.column_config.TextColumn("Concedidas"),
-            "hours_incurred": st.column_config.TextColumn("Incurridas"),
-            "deviation_hours": st.column_config.TextColumn("Desviación"),
-            "consumption_pct": st.column_config.TextColumn("Consumo %"),
-        },
-    )
-    st.download_button(
-        "Descargar CSV · Excel español",
-        data=excel_csv_bytes(displayed_risk[
-            [
-                "risk_level", "project_code", "bonus_id",
-                "operation_description", "hours_granted", "hours_incurred",
-                "deviation_hours", "consumption_pct"
-            ]
-        ]),
-        file_name="riesgos_bonos.csv",
-        mime="text/csv; charset=utf-8",
-        key="csv_riesgos_bonos",
-    )
+    @st.fragment
+    def render_selection_riesgos_bonos():
+        st.dataframe(
+            excel_copy_frame(displayed_risk[
+                [
+                    "risk_level", "project_code", "bonus_id",
+                    "operation_description", "hours_granted", "hours_incurred",
+                    "deviation_hours", "consumption_pct"
+                ]
+            ]),
+            on_select="rerun",
+            selection_mode="multi-cell",
+            key="select_riesgos_bonos",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "risk_level": st.column_config.TextColumn("Riesgo"),
+                "project_code": st.column_config.TextColumn("Proyecto"),
+                "bonus_id": st.column_config.TextColumn("Bono"),
+                "operation_description": st.column_config.TextColumn("Descripción"),
+                "hours_granted": st.column_config.TextColumn("Concedidas"),
+                "hours_incurred": st.column_config.TextColumn("Incurridas"),
+                "deviation_hours": st.column_config.TextColumn("Desviación"),
+                "consumption_pct": st.column_config.TextColumn("Consumo %"),
+            },
+        )
+        st.download_button(
+            "Descargar CSV · Excel español",
+            data=excel_csv_bytes(displayed_risk[
+                [
+                    "risk_level", "project_code", "bonus_id",
+                    "operation_description", "hours_granted", "hours_incurred",
+                    "deviation_hours", "consumption_pct"
+                ]
+            ]),
+            file_name="riesgos_bonos.csv",
+            mime="text/csv; charset=utf-8",
+            key="csv_riesgos_bonos",
+        )
+
+    render_selection_riesgos_bonos()
 
     st.stop()
 
@@ -683,35 +687,39 @@ st.plotly_chart(
         "showTips": False,
     },
 )
-st.dataframe(
-    excel_copy_frame(director_summary[
-        ["project_manager", "project_count", "hours_granted",
-         "hours_incurred", "deviation_hours", "consumption_pct"]
-    ]),
-    on_select="rerun",
-        selection_mode="multi-cell",
-        key="select_home_directores",
-        use_container_width=True,
-    hide_index=True,
-    column_config={
-        "project_manager": st.column_config.TextColumn("Director de proyecto"),
-        "project_count": st.column_config.NumberColumn("Proyectos"),
-        "hours_granted": st.column_config.TextColumn("Concedidas"),
-        "hours_incurred": st.column_config.TextColumn("Incurridas"),
-        "deviation_hours": st.column_config.TextColumn("Desviación"),
-        "consumption_pct": st.column_config.TextColumn("Consumo %"),
-    },
-)
-st.download_button(
-    "Descargar CSV · Excel español",
-    data=excel_csv_bytes(director_summary[
-        ["project_manager", "project_count", "hours_granted",
-         "hours_incurred", "deviation_hours", "consumption_pct"]
-    ]),
-    file_name="home_directores.csv",
-    mime="text/csv; charset=utf-8",
-    key="csv_home_directores",
-)
+@st.fragment
+def render_selection_home_directores():
+    st.dataframe(
+        excel_copy_frame(director_summary[
+            ["project_manager", "project_count", "hours_granted",
+             "hours_incurred", "deviation_hours", "consumption_pct"]
+        ]),
+        on_select="rerun",
+            selection_mode="multi-cell",
+            key="select_home_directores",
+            use_container_width=True,
+        hide_index=True,
+        column_config={
+            "project_manager": st.column_config.TextColumn("Director de proyecto"),
+            "project_count": st.column_config.NumberColumn("Proyectos"),
+            "hours_granted": st.column_config.TextColumn("Concedidas"),
+            "hours_incurred": st.column_config.TextColumn("Incurridas"),
+            "deviation_hours": st.column_config.TextColumn("Desviación"),
+            "consumption_pct": st.column_config.TextColumn("Consumo %"),
+        },
+    )
+    st.download_button(
+        "Descargar CSV · Excel español",
+        data=excel_csv_bytes(director_summary[
+            ["project_manager", "project_count", "hours_granted",
+             "hours_incurred", "deviation_hours", "consumption_pct"]
+        ]),
+        file_name="home_directores.csv",
+        mime="text/csv; charset=utf-8",
+        key="csv_home_directores",
+    )
+
+render_selection_home_directores()
 
 st.divider()
 st.subheader("RESUMEN PROYECTOS")
@@ -770,43 +778,47 @@ st.plotly_chart(
 
 project_table = filtered_projects.copy()
 project_table["consumption_pct"] = project_table["consumption_ratio"] * 100
-st.dataframe(
-    excel_copy_frame(project_table[
-        [
-            "project_code", "project_description", "consumption_pct", "project_manager",
-            "hours_granted", "hours_incurred", "deviation_hours",
-            "remaining_hours"
-        ]
-    ]),
-    on_select="rerun",
-        selection_mode="multi-cell",
-        key="select_home_proyectos",
-        use_container_width=True,
-    hide_index=True,
-    column_config={
-        "project_code": st.column_config.TextColumn("Proyecto"),
-        "project_manager": st.column_config.TextColumn("Director de proyecto"),
-        "hours_granted": st.column_config.TextColumn("Concedidas"),
-        "hours_incurred": st.column_config.TextColumn("Incurridas"),
-        "deviation_hours": st.column_config.TextColumn("Desviación"),
-        "remaining_hours": st.column_config.TextColumn("Restantes"),
-        "project_description": st.column_config.TextColumn("Descripción"),
-        "consumption_pct": st.column_config.TextColumn("Consumo %")
-    },
-)
-st.download_button(
-    "Descargar CSV · Excel español",
-    data=excel_csv_bytes(project_table[
-        [
-            "project_code", "project_description", "consumption_pct", "project_manager",
-            "hours_granted", "hours_incurred", "deviation_hours",
-            "remaining_hours"
-        ]
-    ]),
-    file_name="home_proyectos.csv",
-    mime="text/csv; charset=utf-8",
-    key="csv_home_proyectos",
-)
+@st.fragment
+def render_selection_home_proyectos():
+    st.dataframe(
+        excel_copy_frame(project_table[
+            [
+                "project_code", "project_description", "consumption_pct", "project_manager",
+                "hours_granted", "hours_incurred", "deviation_hours",
+                "remaining_hours"
+            ]
+        ]),
+        on_select="rerun",
+            selection_mode="multi-cell",
+            key="select_home_proyectos",
+            use_container_width=True,
+        hide_index=True,
+        column_config={
+            "project_code": st.column_config.TextColumn("Proyecto"),
+            "project_manager": st.column_config.TextColumn("Director de proyecto"),
+            "hours_granted": st.column_config.TextColumn("Concedidas"),
+            "hours_incurred": st.column_config.TextColumn("Incurridas"),
+            "deviation_hours": st.column_config.TextColumn("Desviación"),
+            "remaining_hours": st.column_config.TextColumn("Restantes"),
+            "project_description": st.column_config.TextColumn("Descripción"),
+            "consumption_pct": st.column_config.TextColumn("Consumo %")
+        },
+    )
+    st.download_button(
+        "Descargar CSV · Excel español",
+        data=excel_csv_bytes(project_table[
+            [
+                "project_code", "project_description", "consumption_pct", "project_manager",
+                "hours_granted", "hours_incurred", "deviation_hours",
+                "remaining_hours"
+            ]
+        ]),
+        file_name="home_proyectos.csv",
+        mime="text/csv; charset=utf-8",
+        key="csv_home_proyectos",
+    )
+
+render_selection_home_proyectos()
 
 selected_project = st.selectbox(
     "Project · Proyecto",
@@ -930,43 +942,47 @@ if selected_project != "Todos":
     )
 
     orders["consumption_pct"] = orders["consumption_ratio"] * 100
-    st.dataframe(
-        excel_copy_frame(orders[
-            [
-                "order_number", "order_description", "consumption_pct",
-                "order_status", "hours_granted", "hours_incurred",
-                "deviation_hours", "remaining_hours"
-            ]
-        ]),
-        on_select="rerun",
-        selection_mode="multi-cell",
-        key="select_home_ordenes",
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "order_number": st.column_config.TextColumn("OF"),
-            "order_status": st.column_config.TextColumn("Estado OF"),
-            "hours_granted": st.column_config.TextColumn("Concedidas"),
-            "hours_incurred": st.column_config.TextColumn("Incurridas"),
-            "deviation_hours": st.column_config.TextColumn("Desviación"),
-            "remaining_hours": st.column_config.TextColumn("Restantes"),
-            "order_description": st.column_config.TextColumn("Descripción"),
-            "consumption_pct": st.column_config.TextColumn("Consumo %")
-        },
-    )
-    st.download_button(
-        "Descargar CSV · Excel español",
-        data=excel_csv_bytes(orders[
-            [
-                "order_number", "order_description", "consumption_pct",
-                "order_status", "hours_granted", "hours_incurred",
-                "deviation_hours", "remaining_hours"
-            ]
-        ]),
-        file_name="home_ordenes.csv",
-        mime="text/csv; charset=utf-8",
-        key="csv_home_ordenes",
-    )
+    @st.fragment
+    def render_selection_home_ordenes():
+        st.dataframe(
+            excel_copy_frame(orders[
+                [
+                    "order_number", "order_description", "consumption_pct",
+                    "order_status", "hours_granted", "hours_incurred",
+                    "deviation_hours", "remaining_hours"
+                ]
+            ]),
+            on_select="rerun",
+            selection_mode="multi-cell",
+            key="select_home_ordenes",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "order_number": st.column_config.TextColumn("OF"),
+                "order_status": st.column_config.TextColumn("Estado OF"),
+                "hours_granted": st.column_config.TextColumn("Concedidas"),
+                "hours_incurred": st.column_config.TextColumn("Incurridas"),
+                "deviation_hours": st.column_config.TextColumn("Desviación"),
+                "remaining_hours": st.column_config.TextColumn("Restantes"),
+                "order_description": st.column_config.TextColumn("Descripción"),
+                "consumption_pct": st.column_config.TextColumn("Consumo %")
+            },
+        )
+        st.download_button(
+            "Descargar CSV · Excel español",
+            data=excel_csv_bytes(orders[
+                [
+                    "order_number", "order_description", "consumption_pct",
+                    "order_status", "hours_granted", "hours_incurred",
+                    "deviation_hours", "remaining_hours"
+                ]
+            ]),
+            file_name="home_ordenes.csv",
+            mime="text/csv; charset=utf-8",
+            key="csv_home_ordenes",
+        )
+
+    render_selection_home_ordenes()
 
     all_orders = ["Todas"] + orders["order_number"].dropna().astype(str).drop_duplicates().tolist()
     selected_order = st.selectbox(
@@ -1100,42 +1116,46 @@ if selected_project != "Todos" and selected_order != "Todas":
         },
     )
 
-    st.dataframe(
-        excel_copy_frame(displayed_bonuses[
-            [
-                "bonus_id", "operation_description", "consumption_pct",
-                "hours_granted", "hours_incurred", "deviation_hours",
-                "remaining_hours"
-            ]
-        ]),
-        on_select="rerun",
-        selection_mode="multi-cell",
-        key="select_home_bonos",
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "bonus_id": st.column_config.TextColumn("Bono"),
-            "hours_granted": st.column_config.TextColumn("Concedidas"),
-            "hours_incurred": st.column_config.TextColumn("Incurridas"),
-            "deviation_hours": st.column_config.TextColumn("Desviación"),
-            "remaining_hours": st.column_config.TextColumn("Restantes"),
-            "operation_description": st.column_config.TextColumn("Descripción"),
-            "consumption_pct": st.column_config.TextColumn("Consumo %")
-        },
-    )
-    st.download_button(
-        "Descargar CSV · Excel español",
-        data=excel_csv_bytes(displayed_bonuses[
-            [
-                "bonus_id", "operation_description", "consumption_pct",
-                "hours_granted", "hours_incurred", "deviation_hours",
-                "remaining_hours"
-            ]
-        ]),
-        file_name="home_bonos.csv",
-        mime="text/csv; charset=utf-8",
-        key="csv_home_bonos",
-    )
+    @st.fragment
+    def render_selection_home_bonos():
+        st.dataframe(
+            excel_copy_frame(displayed_bonuses[
+                [
+                    "bonus_id", "operation_description", "consumption_pct",
+                    "hours_granted", "hours_incurred", "deviation_hours",
+                    "remaining_hours"
+                ]
+            ]),
+            on_select="rerun",
+            selection_mode="multi-cell",
+            key="select_home_bonos",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "bonus_id": st.column_config.TextColumn("Bono"),
+                "hours_granted": st.column_config.TextColumn("Concedidas"),
+                "hours_incurred": st.column_config.TextColumn("Incurridas"),
+                "deviation_hours": st.column_config.TextColumn("Desviación"),
+                "remaining_hours": st.column_config.TextColumn("Restantes"),
+                "operation_description": st.column_config.TextColumn("Descripción"),
+                "consumption_pct": st.column_config.TextColumn("Consumo %")
+            },
+        )
+        st.download_button(
+            "Descargar CSV · Excel español",
+            data=excel_csv_bytes(displayed_bonuses[
+                [
+                    "bonus_id", "operation_description", "consumption_pct",
+                    "hours_granted", "hours_incurred", "deviation_hours",
+                    "remaining_hours"
+                ]
+            ]),
+            file_name="home_bonos.csv",
+            mime="text/csv; charset=utf-8",
+            key="csv_home_bonos",
+        )
+
+    render_selection_home_bonos()
 
     if len(all_bonuses) > 2:
         st.selectbox(
