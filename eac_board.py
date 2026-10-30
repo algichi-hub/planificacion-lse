@@ -215,7 +215,7 @@ def render(url):
         f"{float(original.etc_hours.dropna().sum()):,.2f} h",
     )
     headline_pending.metric(
-        f"Horas pendientes · Fecha {real_date:%d/%m/%Y}",
+        f"Horas concedidas pend. · Fecha {real_date:%d/%m/%Y}",
         f"{float(pending_hours):,.2f} h",
     )
 
@@ -316,7 +316,7 @@ def render(url):
 
 
 def chart(frame, category):
-    """Barras agrupadas, ancho completo y códigos compactos en el eje horizontal."""
+    """Barras por director verticales y por proyecto horizontales."""
     data = frame.melt(
         id_vars=[category],
         value_vars=["etc_hours", "hours_incurred", "hours_granted"],
@@ -333,8 +333,14 @@ def chart(frame, category):
         return
     data[category] = data[category].astype(str)
     ordered_codes = frame[category].astype(str).tolist()
+    horizontal = category == "project_code"
     fig = px.bar(
-        data, x=category, y="horas", color="serie", barmode="group",
+        data,
+        x="horas" if horizontal else category,
+        y=category if horizontal else "horas",
+        color="serie",
+        orientation="h" if horizontal else "v",
+        barmode="group",
         color_discrete_map={
             "ETC": "#D5A547",
             "Incurridas": "#1F4E8C",
@@ -351,20 +357,29 @@ def chart(frame, category):
     )
     fig.update_layout(
         autosize=True,
-        height=420,
-        xaxis=dict(
-            title=None, fixedrange=True, tickmode="array",
-            tickvals=ordered_codes,
-            ticktext=([code.split(" ", 1)[0] for code in ordered_codes]
-                      if category == "management_group" else ordered_codes),
-            tickangle=0, automargin=True,
-        ),
-        yaxis=dict(title="Horas", fixedrange=True, rangemode="tozero"),
+        height=max(300, 46 * len(ordered_codes) + 115) if horizontal else 420,
         legend=dict(orientation="h", yanchor="bottom", y=1.02,
                     xanchor="center", x=0.5, title=None),
         dragmode=False,
-        margin=dict(l=10, r=10, t=65, b=15),
+        margin=dict(l=10, r=10, t=65, b=20),
     )
+    if horizontal:
+        fig.update_layout(
+            xaxis=dict(title="Horas", fixedrange=True, rangemode="tozero"),
+            yaxis=dict(title=None, fixedrange=True, type="category",
+                       categoryorder="array", categoryarray=ordered_codes,
+                       autorange="reversed", automargin=True),
+        )
+    else:
+        fig.update_layout(
+            xaxis=dict(
+                title=None, fixedrange=True, tickmode="array",
+                tickvals=ordered_codes,
+                ticktext=[code.split(" ", 1)[0] for code in ordered_codes],
+                tickangle=0, automargin=True,
+            ),
+            yaxis=dict(title="Horas", fixedrange=True, rangemode="tozero"),
+        )
     st.plotly_chart(
         fig, use_container_width=True, theme="streamlit",
         config={"displayModeBar": False, "scrollZoom": False,
