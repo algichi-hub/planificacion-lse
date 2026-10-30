@@ -5,7 +5,7 @@ import plotly.express as px
 import psycopg
 import streamlit as st
 from dotenv import load_dotenv
-from excel_compat import excel_copy_frame
+from excel_compat import excel_copy_frame, excel_csv_bytes
 
 
 load_dotenv()
@@ -546,6 +546,19 @@ if view == "risks":
             "consumption_pct": st.column_config.TextColumn("Consumo %"),
         },
     )
+    st.download_button(
+        "Descargar CSV · Excel español",
+        data=excel_csv_bytes(displayed_risk[
+            [
+                "risk_level", "project_code", "bonus_id",
+                "operation_description", "hours_granted", "hours_incurred",
+                "deviation_hours", "consumption_pct"
+            ]
+        ]),
+        file_name="riesgos_bonos.csv",
+        mime="text/csv; charset=utf-8",
+        key="csv_riesgos_bonos",
+    )
 
     st.stop()
 
@@ -683,6 +696,16 @@ st.dataframe(
         "consumption_pct": st.column_config.TextColumn("Consumo %"),
     },
 )
+st.download_button(
+    "Descargar CSV · Excel español",
+    data=excel_csv_bytes(director_summary[
+        ["project_manager", "project_count", "hours_granted",
+         "hours_incurred", "deviation_hours", "consumption_pct"]
+    ]),
+    file_name="home_directores.csv",
+    mime="text/csv; charset=utf-8",
+    key="csv_home_directores",
+)
 
 st.divider()
 st.subheader("RESUMEN PROYECTOS")
@@ -761,6 +784,19 @@ st.dataframe(
         "project_description": st.column_config.TextColumn("Descripción"),
         "consumption_pct": st.column_config.TextColumn("Consumo %")
     },
+)
+st.download_button(
+    "Descargar CSV · Excel español",
+    data=excel_csv_bytes(project_table[
+        [
+            "project_code", "project_description", "consumption_pct", "project_manager",
+            "hours_granted", "hours_incurred", "deviation_hours",
+            "remaining_hours"
+        ]
+    ]),
+    file_name="home_proyectos.csv",
+    mime="text/csv; charset=utf-8",
+    key="csv_home_proyectos",
 )
 
 selected_project = st.selectbox(
@@ -905,6 +941,19 @@ if selected_project != "Todos":
             "order_description": st.column_config.TextColumn("Descripción"),
             "consumption_pct": st.column_config.TextColumn("Consumo %")
         },
+    )
+    st.download_button(
+        "Descargar CSV · Excel español",
+        data=excel_csv_bytes(orders[
+            [
+                "order_number", "order_description", "consumption_pct",
+                "order_status", "hours_granted", "hours_incurred",
+                "deviation_hours", "remaining_hours"
+            ]
+        ]),
+        file_name="home_ordenes.csv",
+        mime="text/csv; charset=utf-8",
+        key="csv_home_ordenes",
     )
 
     all_orders = ["Todas"] + orders["order_number"].dropna().astype(str).drop_duplicates().tolist()
@@ -1058,6 +1107,19 @@ if selected_project != "Todos" and selected_order != "Todas":
             "operation_description": st.column_config.TextColumn("Descripción"),
             "consumption_pct": st.column_config.TextColumn("Consumo %")
         },
+    )
+    st.download_button(
+        "Descargar CSV · Excel español",
+        data=excel_csv_bytes(displayed_bonuses[
+            [
+                "bonus_id", "operation_description", "consumption_pct",
+                "hours_granted", "hours_incurred", "deviation_hours",
+                "remaining_hours"
+            ]
+        ]),
+        file_name="home_bonos.csv",
+        mime="text/csv; charset=utf-8",
+        key="csv_home_bonos",
     )
 
     if len(all_bonuses) > 2:
