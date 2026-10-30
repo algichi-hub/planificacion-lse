@@ -5,6 +5,7 @@ import plotly.express as px
 import psycopg
 import streamlit as st
 from dotenv import load_dotenv
+from excel_compat import excel_copy_frame
 
 
 load_dotenv()
@@ -525,13 +526,13 @@ if view == "risks":
         ]
 
     st.dataframe(
-        displayed_risk[
+        excel_copy_frame(displayed_risk[
             [
                 "risk_level", "project_code", "bonus_id",
                 "operation_description", "hours_granted", "hours_incurred",
                 "deviation_hours", "consumption_pct"
             ]
-        ],
+        ]),
         use_container_width=True,
         hide_index=True,
         column_config={
@@ -539,10 +540,10 @@ if view == "risks":
             "project_code": st.column_config.TextColumn("Proyecto"),
             "bonus_id": st.column_config.TextColumn("Bono"),
             "operation_description": st.column_config.TextColumn("Descripción"),
-            "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
-            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
-            "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
-            "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
+            "hours_granted": st.column_config.TextColumn("Concedidas"),
+            "hours_incurred": st.column_config.TextColumn("Incurridas"),
+            "deviation_hours": st.column_config.TextColumn("Desviación"),
+            "consumption_pct": st.column_config.TextColumn("Consumo %"),
         },
     )
 
@@ -667,19 +668,19 @@ st.plotly_chart(
     },
 )
 st.dataframe(
-    director_summary[
+    excel_copy_frame(director_summary[
         ["project_manager", "project_count", "hours_granted",
          "hours_incurred", "deviation_hours", "consumption_pct"]
-    ],
+    ]),
     use_container_width=True,
     hide_index=True,
     column_config={
         "project_manager": st.column_config.TextColumn("Director de proyecto"),
         "project_count": st.column_config.NumberColumn("Proyectos"),
-        "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
-        "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
-        "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
-        "consumption_pct": st.column_config.NumberColumn("Consumo %", format="%.1f %%"),
+        "hours_granted": st.column_config.TextColumn("Concedidas"),
+        "hours_incurred": st.column_config.TextColumn("Incurridas"),
+        "deviation_hours": st.column_config.TextColumn("Desviación"),
+        "consumption_pct": st.column_config.TextColumn("Consumo %"),
     },
 )
 
@@ -741,27 +742,24 @@ st.plotly_chart(
 project_table = filtered_projects.copy()
 project_table["consumption_pct"] = project_table["consumption_ratio"] * 100
 st.dataframe(
-    project_table[
+    excel_copy_frame(project_table[
         [
             "project_code", "project_description", "consumption_pct", "project_manager",
             "hours_granted", "hours_incurred", "deviation_hours",
             "remaining_hours"
         ]
-    ],
+    ]),
     use_container_width=True,
     hide_index=True,
     column_config={
         "project_code": st.column_config.TextColumn("Proyecto"),
         "project_manager": st.column_config.TextColumn("Director de proyecto"),
-        "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
-        "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
-        "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
-        "remaining_hours": st.column_config.NumberColumn("Restantes", format="%+.1f h"),
+        "hours_granted": st.column_config.TextColumn("Concedidas"),
+        "hours_incurred": st.column_config.TextColumn("Incurridas"),
+        "deviation_hours": st.column_config.TextColumn("Desviación"),
+        "remaining_hours": st.column_config.TextColumn("Restantes"),
         "project_description": st.column_config.TextColumn("Descripción"),
-        "consumption_pct": st.column_config.NumberColumn(
-            "Consumo %",
-            format="%.1f %%",
-        )
+        "consumption_pct": st.column_config.TextColumn("Consumo %")
     },
 )
 
@@ -888,27 +886,24 @@ if selected_project != "Todos":
 
     orders["consumption_pct"] = orders["consumption_ratio"] * 100
     st.dataframe(
-        orders[
+        excel_copy_frame(orders[
             [
                 "order_number", "order_description", "consumption_pct",
                 "order_status", "hours_granted", "hours_incurred",
                 "deviation_hours", "remaining_hours"
             ]
-        ],
+        ]),
         use_container_width=True,
         hide_index=True,
         column_config={
             "order_number": st.column_config.TextColumn("OF"),
             "order_status": st.column_config.TextColumn("Estado OF"),
-            "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
-            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
-            "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
-            "remaining_hours": st.column_config.NumberColumn("Restantes", format="%+.1f h"),
+            "hours_granted": st.column_config.TextColumn("Concedidas"),
+            "hours_incurred": st.column_config.TextColumn("Incurridas"),
+            "deviation_hours": st.column_config.TextColumn("Desviación"),
+            "remaining_hours": st.column_config.TextColumn("Restantes"),
             "order_description": st.column_config.TextColumn("Descripción"),
-            "consumption_pct": st.column_config.NumberColumn(
-                "Consumo %",
-                format="%.1f %%",
-            )
+            "consumption_pct": st.column_config.TextColumn("Consumo %")
         },
     )
 
@@ -1045,26 +1040,23 @@ if selected_project != "Todos" and selected_order != "Todas":
     )
 
     st.dataframe(
-        displayed_bonuses[
+        excel_copy_frame(displayed_bonuses[
             [
                 "bonus_id", "operation_description", "consumption_pct",
                 "hours_granted", "hours_incurred", "deviation_hours",
                 "remaining_hours"
             ]
-        ],
+        ]),
         use_container_width=True,
         hide_index=True,
         column_config={
             "bonus_id": st.column_config.TextColumn("Bono"),
-            "hours_granted": st.column_config.NumberColumn("Concedidas", format="%.1f h"),
-            "hours_incurred": st.column_config.NumberColumn("Incurridas", format="%.1f h"),
-            "deviation_hours": st.column_config.NumberColumn("Desviación", format="%+.1f h"),
-            "remaining_hours": st.column_config.NumberColumn("Restantes", format="%+.1f h"),
+            "hours_granted": st.column_config.TextColumn("Concedidas"),
+            "hours_incurred": st.column_config.TextColumn("Incurridas"),
+            "deviation_hours": st.column_config.TextColumn("Desviación"),
+            "remaining_hours": st.column_config.TextColumn("Restantes"),
             "operation_description": st.column_config.TextColumn("Descripción"),
-            "consumption_pct": st.column_config.NumberColumn(
-                "Consumo %",
-                format="%.1f %%",
-            )
+            "consumption_pct": st.column_config.TextColumn("Consumo %")
         },
     )
 
