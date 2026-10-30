@@ -55,6 +55,21 @@ st.markdown(
     [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
         padding-top: 0.55rem;
     }
+    /* Exclusivo para exportaciones CSV, sin alterar otros botones ni el tema. */
+    div[class*="st-key-csv_"] button {
+        background-color: #217346 !important;
+        border-color: #217346 !important;
+        color: #FFFFFF !important;
+    }
+    div[class*="st-key-csv_"] button:hover {
+        background-color: #185C37 !important;
+        border-color: #185C37 !important;
+        color: #FFFFFF !important;
+    }
+    div[class*="st-key-csv_"] button:focus-visible {
+        outline: 2px solid #217346;
+        outline-offset: 2px;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -552,7 +567,7 @@ if view == "risks":
             },
         )
         st.download_button(
-            "Descargar CSV · Excel español",
+            "Descargar CSV",
             data=excel_csv_bytes(displayed_risk[
                 [
                     "risk_level", "project_code", "bonus_id",
@@ -709,7 +724,7 @@ def render_selection_home_directores():
         },
     )
     st.download_button(
-        "Descargar CSV · Excel español",
+        "Descargar CSV",
         data=excel_csv_bytes(director_summary[
             ["project_manager", "project_count", "hours_granted",
              "hours_incurred", "deviation_hours", "consumption_pct"]
@@ -805,7 +820,7 @@ def render_selection_home_proyectos():
         },
     )
     st.download_button(
-        "Descargar CSV · Excel español",
+        "Descargar CSV",
         data=excel_csv_bytes(project_table[
             [
                 "project_code", "project_description", "consumption_pct", "project_manager",
@@ -969,7 +984,7 @@ if selected_project != "Todos":
             },
         )
         st.download_button(
-            "Descargar CSV · Excel español",
+            "Descargar CSV",
             data=excel_csv_bytes(orders[
                 [
                     "order_number", "order_description", "consumption_pct",
@@ -1142,7 +1157,7 @@ if selected_project != "Todos" and selected_order != "Todas":
             },
         )
         st.download_button(
-            "Descargar CSV · Excel español",
+            "Descargar CSV",
             data=excel_csv_bytes(displayed_bonuses[
                 [
                     "bonus_id", "operation_description", "consumption_pct",
