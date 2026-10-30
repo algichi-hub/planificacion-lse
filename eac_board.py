@@ -6,7 +6,7 @@ import plotly.express as px
 import psycopg
 from psycopg.rows import dict_row
 import streamlit as st
-from excel_compat import excel_copy_frame
+from excel_compat import excel_copy_frame, excel_csv_bytes
 
 def connection(url):
     return psycopg.connect(url, connect_timeout=10, row_factory=dict_row)
@@ -314,6 +314,16 @@ def render(url):
             "hours_incurred": st.column_config.TextColumn("Incurridas"),
             "hours_granted": st.column_config.TextColumn("Concedidas"),
         },
+    )
+    st.download_button(
+        "Descargar CSV · Excel español",
+        data=excel_csv_bytes(selected_projects[
+            ["project_code", "description", "management_group",
+             "etc_hours", "hours_incurred", "hours_granted"]
+        ]),
+        file_name="etc_proyectos.csv",
+        mime="text/csv; charset=utf-8",
+        key="csv_etc_proyectos",
     )
 
 
