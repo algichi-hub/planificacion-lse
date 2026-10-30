@@ -321,7 +321,7 @@ def render(url):
             },
         )
         st.download_button(
-            "Descargar CSV · Excel español",
+            "Descargar CSV",
             data=excel_csv_bytes(selected_projects[
                 ["project_code", "description", "management_group",
                  "etc_hours", "hours_incurred", "hours_granted"]
