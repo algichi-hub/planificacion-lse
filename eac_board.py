@@ -121,10 +121,23 @@ def operational_hours(url, on_date):
             "WHERE f.snapshot_date=%s GROUP BY f.project_code", (on_date,)
         ).fetchall())
 
-def latest_operational_date(url):
+def list_real_snapshots(url):
+    """Available ERP snapshots; no write to operational data."""
     with connection(url) as conn:
-        row = conn.execute("SELECT max(snapshot_date) AS date FROM fact_hours").fetchone()
-        return row["date"]
+        rows = conn.execute(
+            "SELECT DISTINCT snapshot_date FROM fact_hours ORDER BY snapshot_date DESC"
+        ).fetchall()
+    return [row["snapshot_date"] for row in rows]
+
+
+def pending_real_hours(url, on_date):
+    """Sum signed granted-minus-incurred across all directors for a single ERP snapshot."""
+    with connection(url) as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(hours_granted - hours_incurred), 0) AS pending "
+            "FROM fact_hours WHERE snapshot_date = %s", (on_date,)
+        ).fetchone()
+    return row["pending"]
 
 def hours_value(value):
     if value is None or (not isinstance(value, str) and pd.isna(value)):
@@ -168,17 +181,47 @@ def render(url):
         return
     choices = {int(x.id):f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
                for x in snapshots.itertuples(index=False)}
-    selected = st.selectbox("Snapshot", list(choices), format_func=lambda v:choices[v])
+    selected = st.selectbox("Snapshot ETC", list(choices), format_func=lambda v:choices[v])
+    try:
+        real_dates = list_real_snapshots(url)
+    except psycopg.Error as exc:
+        st.error(f"No se pueden consultar los snapshots reales: {type(exc).__name__}")
+        st.stop()
+    if not real_dates:
+        st.warning("No hay snapshots reales disponibles en la BBDD.")
+        st.stop()
+    real_date = st.selectbox(
+        "Snapshot Reales",
+        real_dates,
+        index=0,
+        format_func=lambda value: value.strftime("%d/%m/%Y"),
+        help="Fecha del snapshot ERP que se utiliza para concedidas, incurridas y pendientes.",
+    )
     status = snapshots.loc[snapshots["id"]==selected,"status"].iloc[0]
     original = load_projects(url,selected)
     if original.empty:
         st.info("Todavía no hay proyectos en el catálogo.")
         return
+    selected_meta = snapshots.loc[snapshots["id"] == selected].iloc[0]
+    etc_period = f"{int(selected_meta['year'])}Q{int(selected_meta['quarter'])}"
+    try:
+        pending_hours = pending_real_hours(url, real_date)
+    except psycopg.Error as exc:
+        st.error(f"No se pueden calcular las horas pendientes: {type(exc).__name__}")
+        st.stop()
+    headline_etc, headline_pending = st.columns(2)
+    headline_etc.metric(
+        f"ETC registrado · {etc_period}",
+        f"{float(original.etc_hours.dropna().sum()):,.2f} h",
+    )
+    headline_pending.metric(
+        f"Horas pendientes · Fecha {real_date:%d/%m/%Y}",
+        f"{float(pending_hours):,.2f} h",
+    )
+
     groups = sorted(original["management_group"].unique())
     group = st.selectbox("Agrupación por director", ["Todas"]+groups)
     filtered = original if group=="Todas" else original[original.management_group==group]
-    st.metric("ETC registrado · trimestre seleccionado",
-              f"{float(original.etc_hours.dropna().sum()):,.2f} h")
     st.caption(f"{original.etc_hours.notna().sum()} de {len(original)} proyectos tienen ETC registrado.")
     st.subheader("Editar ETC por proyecto")
     editor = filtered[["project_code","description","management_group","etc_hours"]].copy()
@@ -225,12 +268,8 @@ def render(url):
 
     st.divider()
     st.subheader("ETC por director")
-    on_date = latest_operational_date(url)
-    if on_date is None:
-        st.info("No hay snapshot ERP operativo para comparar.")
-        return
-    st.caption(f"ETC {choices[selected]} · Datos ERP del snapshot {on_date}.")
-    facts = operational_hours(url, on_date)
+    st.caption(f"ETC {etc_period} · Reales {real_date:%d/%m/%Y}.")
+    facts = operational_hours(url, real_date)
     joined = original.merge(facts, on="project_code", how="left")
     for column in ("hours_granted", "hours_incurred"):
         joined[column] = pd.to_numeric(joined[column], errors="coerce").fillna(0)
