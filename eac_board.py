@@ -24,7 +24,7 @@ def create_snapshot(url, year, quarter, copy_previous=False):
                 "ON CONFLICT (year,quarter) DO NOTHING RETURNING id", (year, quarter)
             ).fetchone()
             if row is None:
-                raise ValueError("Ya existe una fotografía para ese año y trimestre.")
+                raise ValueError("Ya existe un snapshot para ese año y trimestre.")
             new_id = row["id"]
             if copy_previous:
                 prev = conn.execute(
@@ -35,11 +35,6 @@ def create_snapshot(url, year, quarter, copy_previous=False):
                     conn.execute(
                         "INSERT INTO eac_project_hours(snapshot_id,project_code,etc_hours) "
                         "SELECT %s,project_code,etc_hours FROM eac_project_hours WHERE snapshot_id=%s",
-                        (new_id,prev["id"])
-                    )
-                    conn.execute(
-                        "INSERT INTO eac_project_hours_audit(snapshot_id,project_code,old_hours,new_hours) "
-                        "SELECT %s,project_code,NULL,etc_hours FROM eac_project_hours WHERE snapshot_id=%s",
                         (new_id,prev["id"])
                     )
     return new_id
@@ -63,7 +58,7 @@ def save_edits(url, snapshot_id, changes):
                 "SELECT status FROM eac_snapshots WHERE id=%s FOR UPDATE", (snapshot_id,)
             ).fetchone()
             if not status or status["status"] != "draft":
-                raise ValueError("Fotografía inexistente o publicada: edición bloqueada.")
+                raise ValueError("Snapshot inexistente o publicado: edición bloqueada.")
             for code, old, new in changes:
                 prior = conn.execute(
                     "SELECT etc_hours FROM eac_project_hours WHERE snapshot_id=%s "
@@ -88,10 +83,6 @@ def save_edits(url, snapshot_id, changes):
                         "INSERT INTO eac_project_hours(snapshot_id,project_code,etc_hours) "
                         "VALUES (%s,%s,%s)", (snapshot_id,code,new)
                     )
-                conn.execute(
-                    "INSERT INTO eac_project_hours_audit(snapshot_id,project_code,old_hours,new_hours) "
-                    "VALUES (%s,%s,%s,%s)", (snapshot_id,code,old,new)
-                )
             if changes:
                 conn.execute("UPDATE eac_snapshots SET updated_at=now() WHERE id=%s", (snapshot_id,))
 
@@ -114,7 +105,7 @@ def publish(url, snapshot_id):
             )
 
 def reopen(url, snapshot_id):
-    """Reopen a published ETC for controlled corrections (all edits remain audited)."""
+    """Reopen a published ETC for controlled corrections."""
     with connection(url) as conn:
         with conn.transaction():
             conn.execute(
@@ -219,7 +210,7 @@ def render(url):
                 st.rerun()
             except (ValueError,psycopg.Error) as exc:
                 st.error(str(exc))
-        if st.button("Publicar fotografía ETC",help="La publicación bloquea nuevas ediciones."):
+        if st.button("Publicar snapshot ETC",help="La publicación bloquea nuevas ediciones."):
             try:
                 publish(url,selected)
                 st.success("Snapshot publicado.")
@@ -228,7 +219,7 @@ def render(url):
                 st.error(str(exc))
     else:
         st.info("Snapshot publicado. Puedes reabrirlo para corregir valores.")
-        if st.button("Reabrir para editar", help="Permite modificar de nuevo una fotografía publicada."):
+        if st.button("Reabrir para editar", help="Permite modificar de nuevo un snapshot publicado."):
             reopen(url,selected)
             st.rerun()
 
