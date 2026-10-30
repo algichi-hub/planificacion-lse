@@ -30,3 +30,34 @@ st.dataframe(
 Regresión rápida: ejecutar `python -m unittest discover -s tests -p test_excel_compat.py` y verificar en navegador que seleccionar, copiar y pegar celdas produce números reconocidos por Excel con configuración regional española.
 
 No requiere ningún cambio en esquema o datos de Neon.
+
+## Exportación CSV compatible con Excel español (obligatoria)
+
+El CSV integrado en el menú de `st.dataframe` utiliza un formato propio,
+normalmente con comas como separadores de columna: **no sirve para Excel español
+abierto directamente**. Mantener la opción nativa, pero proporcionar siempre
+un botón visible **Descargar CSV · Excel español** junto a cada tabla de consulta:
+
+```python
+from excel_compat import excel_copy_frame, excel_csv_bytes
+
+visible = df[["project_code", "hours_granted", "hours_incurred"]]
+st.dataframe(excel_copy_frame(visible), use_container_width=True)
+st.download_button(
+    "Descargar CSV · Excel español",
+    data=excel_csv_bytes(visible),  # dataframe original, no el de visualización
+    file_name="proyectos.csv",
+    mime="text/csv; charset=utf-8",
+    key="csv_proyectos",
+)
+```
+
+Contrato: codificación UTF-8 con BOM, separador de columnas `;`, coma decimal,
+sin separador de miles, saltos de línea CRLF, sin índice. Se conservan las
+comas dentro de las descripciones porque el delimitador es `;`. Para validar:
+`python -m unittest discover -s tests -p test_excel_compat.py` y apertura del
+CSV descargado en Excel (España).
+
+**Importante:** el menú nativo de descarga CSV de Streamlit puede continuar
+ofreciendo archivos delimitados por comas. Para Excel español usar siempre el
+botón específico de exportación. No modificar Neon ni el editor ETC.
