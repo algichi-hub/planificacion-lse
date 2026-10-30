@@ -305,6 +305,9 @@ def render(url):
              "etc_hours", "hours_incurred", "hours_granted"]
         ]),
         hide_index=True,
+        on_select="rerun",
+        selection_mode="multi-cell",
+        key="select_etc_proyectos",
         use_container_width=True,
         column_config={
             "project_code": st.column_config.TextColumn("Proyecto"),
