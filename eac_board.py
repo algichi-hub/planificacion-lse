@@ -6,6 +6,7 @@ import plotly.express as px
 import psycopg
 from psycopg.rows import dict_row
 import streamlit as st
+from excel_compat import excel_copy_frame
 
 def connection(url):
     return psycopg.connect(url, connect_timeout=10, row_factory=dict_row)
@@ -297,18 +298,12 @@ def render(url):
     )
     selected_projects = joined.loc[joined["management_group"] == director].copy()
     chart(selected_projects, "project_code")
-    # Solo tabla de consulta: mostrar y copiar caracteres decimales españoles.
-    # Conservamos joined/selected_projects como números para cálculos y gráficos.
-    excel_view = selected_projects[
-        ["project_code", "description", "management_group",
-         "etc_hours", "hours_incurred", "hours_granted"]
-    ].copy()
-    for column in ("etc_hours", "hours_incurred", "hours_granted"):
-        excel_view[column] = excel_view[column].map(
-            lambda value: "" if pd.isna(value) else f"{value:.2f}".replace(".", ",")
-        )
+    # Representación de consulta compatible con Excel; editor ETC continúa numérico.
     st.dataframe(
-        excel_view,
+        excel_copy_frame(selected_projects[
+            ["project_code", "description", "management_group",
+             "etc_hours", "hours_incurred", "hours_granted"]
+        ]),
         hide_index=True,
         use_container_width=True,
         column_config={
