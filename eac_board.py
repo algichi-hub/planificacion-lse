@@ -113,6 +113,15 @@ def publish(url, snapshot_id):
                 "WHERE id=%s", (snapshot_id,)
             )
 
+def reopen(url, snapshot_id):
+    """Reopen a published ETC for controlled corrections (all edits remain audited)."""
+    with connection(url) as conn:
+        with conn.transaction():
+            conn.execute(
+                "UPDATE eac_snapshots SET status='draft',published_at=NULL,updated_at=now() "
+                "WHERE id=%s AND status='published'", (snapshot_id,)
+            )
+
 def operational_hours(url, on_date):
     with connection(url) as conn:
         return pd.DataFrame(conn.execute(
@@ -221,7 +230,10 @@ def render(url):
             except (ValueError,psycopg.Error) as exc:
                 st.error(str(exc))
     else:
-        st.info("Fotografía publicada y bloqueada contra ediciones.")
+        st.info("Fotografía publicada. Puedes reabrirla para corregir valores; cada cambio queda auditado.")
+        if st.button("Reabrir para editar", help="Permite modificar de nuevo una fotografía publicada."):
+            reopen(url,selected)
+            st.rerun()
 
     st.divider()
     st.subheader("Comparación informativa ETC / concedidas / incurridas")
