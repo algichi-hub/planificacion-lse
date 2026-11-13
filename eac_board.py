@@ -106,7 +106,7 @@ def publish(url, snapshot_id):
             )
 
 def reopen(url, snapshot_id):
-    """Reopen a published ETC for controlled corrections."""
+    """Reopen a published EAC for controlled corrections."""
     with connection(url) as conn:
         with conn.transaction():
             conn.execute(
@@ -130,15 +130,6 @@ def list_real_snapshots(url):
         ).fetchall()
     return [row["snapshot_date"] for row in rows]
 
-
-def pending_real_hours(url, on_date):
-    """Sum signed granted-minus-incurred across all directors for a single ERP snapshot."""
-    with connection(url) as conn:
-        row = conn.execute(
-            "SELECT COALESCE(SUM(hours_granted - hours_incurred), 0) AS pending "
-            "FROM fact_hours WHERE snapshot_date = %s", (on_date,)
-        ).fetchone()
-    return row["pending"]
 
 def hours_value(value):
     if value is None or (not isinstance(value, str) and pd.isna(value)):
@@ -206,10 +197,12 @@ def render(url):
     selected_meta = snapshots.loc[snapshots["id"] == selected].iloc[0]
     eac_period = f"{int(selected_meta['year'])}Q{int(selected_meta['quarter'])}"
     try:
-        pending_hours = pending_real_hours(url, real_date)
+        facts = operational_hours(url, real_date)
     except psycopg.Error as exc:
-        st.error(f"No se pueden calcular las horas pendientes: {type(exc).__name__}")
+        st.error(f"No se pueden consultar las horas reales: {type(exc).__name__}")
         st.stop()
+    # Reutilizar el mismo snapshot ERP para indicador y gráficos: una consulta menos.
+    pending_hours = (facts["hours_granted"] - facts["hours_incurred"]).sum()
     headline_eac, headline_pending = st.columns(2)
     headline_eac.metric(
         f"EAC registrado · {eac_period}",
@@ -270,7 +263,6 @@ def render(url):
     st.divider()
     st.subheader("EAC por director")
     st.caption(f"EAC {eac_period} · Reales {real_date:%d/%m/%Y}.")
-    facts = operational_hours(url, real_date)
     joined = original.merge(facts, on="project_code", how="left")
     for column in ("hours_granted", "hours_incurred"):
         joined[column] = pd.to_numeric(joined[column], errors="coerce").fillna(0)
