@@ -1,4 +1,4 @@
-"""ETC quarterly editor and informational EAC dashboard. ERP data are read-only."""
+"""Quarterly EAC editor and dashboard. ERP data are read-only."""
 from datetime import date
 from decimal import Decimal, InvalidOperation
 import pandas as pd
@@ -99,7 +99,7 @@ def publish(url, snapshot_id):
                 "SELECT count(*) AS n FROM eac_project_hours WHERE snapshot_id=%s", (snapshot_id,)
             ).fetchone()["n"]
             if count == 0:
-                raise ValueError("No es posible publicar un ETC sin valores.")
+                raise ValueError("No es posible publicar un EAC sin valores.")
             conn.execute(
                 "UPDATE eac_snapshots SET status='published', published_at=now(),updated_at=now() "
                 "WHERE id=%s", (snapshot_id,)
@@ -148,9 +148,9 @@ def hours_value(value):
     try:
         decimal = Decimal(str(value))
     except (InvalidOperation, ValueError):
-        raise ValueError(f"Valor ETC no válido: {value}")
+        raise ValueError(f"Valor EAC no válido: {value}")
     if not decimal.is_finite() or decimal < 0 or decimal.as_tuple().exponent < -2:
-        raise ValueError(f"ETC requiere un número >= 0 con un máximo de 2 decimales: {value}")
+        raise ValueError(f"EAC requiere un número >= 0 con un máximo de 2 decimales: {value}")
     return decimal
 
 def render(url):
@@ -164,13 +164,13 @@ def render(url):
         st.error(f"No se puede leer EAC en Neon: {type(exc).__name__}")
         st.stop()
 
-    with st.expander("Nuevo snapshot ETC", expanded=snapshots.empty):
+    with st.expander("Nuevo snapshot EAC", expanded=snapshots.empty):
         c1,c2,c3 = st.columns(3)
         year = c1.number_input("Año", min_value=2000,max_value=2200,value=date.today().year,step=1)
         quarter = c2.selectbox("Trimestre", [1,2,3,4], index=(date.today().month-1)//3,
                                format_func=lambda q:f"Q{q}")
         copy_previous = c3.checkbox("Copiar valores del último trimestre",value=False)
-        if st.button("Crear borrador ETC",type="primary"):
+        if st.button("Crear borrador EAC",type="primary"):
             try:
                 create_snapshot(url,int(year),int(quarter),copy_previous)
                 st.success("Snapshot creado.")
@@ -182,7 +182,7 @@ def render(url):
         return
     choices = {int(x.id):f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
                for x in snapshots.itertuples(index=False)}
-    selected = st.selectbox("Snapshot ETC seleccionado", list(choices), index=0, format_func=lambda v:choices[v])
+    selected = st.selectbox("Snapshot EAC seleccionado", list(choices), index=0, format_func=lambda v:choices[v])
     try:
         real_dates = list_real_snapshots(url)
     except psycopg.Error as exc:
@@ -204,15 +204,15 @@ def render(url):
         st.info("Todavía no hay proyectos en el catálogo.")
         return
     selected_meta = snapshots.loc[snapshots["id"] == selected].iloc[0]
-    etc_period = f"{int(selected_meta['year'])}Q{int(selected_meta['quarter'])}"
+    eac_period = f"{int(selected_meta['year'])}Q{int(selected_meta['quarter'])}"
     try:
         pending_hours = pending_real_hours(url, real_date)
     except psycopg.Error as exc:
         st.error(f"No se pueden calcular las horas pendientes: {type(exc).__name__}")
         st.stop()
-    headline_etc, headline_pending = st.columns(2)
-    headline_etc.metric(
-        f"ETC registrado · {etc_period}",
+    headline_eac, headline_pending = st.columns(2)
+    headline_eac.metric(
+        f"EAC registrado · {eac_period}",
         f"{float(original.etc_hours.dropna().sum()):,.2f} h",
     )
     headline_pending.metric(
@@ -223,8 +223,8 @@ def render(url):
     groups = sorted(original["management_group"].unique())
     group = st.selectbox("Agrupación por director", ["Todas"]+groups)
     filtered = original if group=="Todas" else original[original.management_group==group]
-    st.caption(f"{original.etc_hours.notna().sum()} de {len(original)} proyectos tienen ETC registrado.")
-    st.subheader("Editar ETC por proyecto")
+    st.caption(f"{original.etc_hours.notna().sum()} de {len(original)} proyectos tienen EAC registrado.")
+    st.subheader("Editar EAC por proyecto")
     editor = filtered[["project_code","description","management_group","etc_hours"]].copy()
     # Float values are only used in the UI; writes are converted back to exact Decimal.
     editor["etc_hours"] = pd.to_numeric(editor["etc_hours"],errors="coerce")
@@ -236,11 +236,11 @@ def render(url):
             "project_code":st.column_config.TextColumn("Proyecto"),
             "description":st.column_config.TextColumn("Descripción"),
             "management_group":st.column_config.TextColumn("Director"),
-            "etc_hours":st.column_config.NumberColumn("ETC (h)",min_value=0,step=0.5,format="%.2f")
+            "etc_hours":st.column_config.NumberColumn("EAC (h)",min_value=0,step=0.5,format="%.2f")
         }
     )
     if status=="draft":
-        if st.button("Guardar modificaciones ETC",type="primary"):
+        if st.button("Guardar modificaciones EAC",type="primary"):
             changes=[]
             try:
                 orig_map=dict(zip(filtered.project_code,filtered.etc_hours))
@@ -254,7 +254,7 @@ def render(url):
                 st.rerun()
             except (ValueError,psycopg.Error) as exc:
                 st.error(str(exc))
-        if st.button("Publicar snapshot ETC",help="La publicación bloquea nuevas ediciones."):
+        if st.button("Publicar snapshot EAC",help="La publicación bloquea nuevas ediciones."):
             try:
                 publish(url,selected)
                 st.success("Snapshot publicado.")
@@ -268,8 +268,8 @@ def render(url):
             st.rerun()
 
     st.divider()
-    st.subheader("ETC por director")
-    st.caption(f"ETC {etc_period} · Reales {real_date:%d/%m/%Y}.")
+    st.subheader("EAC por director")
+    st.caption(f"EAC {eac_period} · Reales {real_date:%d/%m/%Y}.")
     facts = operational_hours(url, real_date)
     joined = original.merge(facts, on="project_code", how="left")
     for column in ("hours_granted", "hours_incurred"):
@@ -289,7 +289,7 @@ def render(url):
     chart(summary, "management_group")
 
     st.divider()
-    st.subheader("ETC por proyecto")
+    st.subheader("EAC por proyecto")
     director = st.selectbox(
         "Agrupación por director",
         groups,
@@ -297,14 +297,17 @@ def render(url):
         help="Selecciona la agrupación cuyos proyectos quieres visualizar.",
     )
     selected_projects = joined.loc[joined["management_group"] == director].copy()
+    # Positivo = incurridas por encima del EAC; sin EAC no se calcula desviación.
+    selected_projects["inc_vs_eac"] = selected_projects["hours_incurred"] - selected_projects["etc_hours"]
     chart(selected_projects, "project_code")
-    # Representación de consulta compatible con Excel; editor ETC continúa numérico.
+    st.caption("Inc vs. EAC = Total incurrido − EAC. Positivo indica exceso; sin EAC, diferencia vacía.")
+    # Representación de consulta compatible con Excel; editor EAC continúa numérico.
     @st.fragment
     def render_selection_etc_proyectos():
         st.dataframe(
             excel_copy_frame(selected_projects[
                 ["project_code", "description", "management_group",
-                 "etc_hours", "hours_incurred", "hours_granted"]
+                 "hours_incurred", "hours_granted", "etc_hours", "inc_vs_eac"]
             ]),
             hide_index=True,
             on_select="rerun",
@@ -315,18 +318,19 @@ def render(url):
                 "project_code": st.column_config.TextColumn("Proyecto"),
                 "description": st.column_config.TextColumn("Descripción"),
                 "management_group": st.column_config.TextColumn("Director"),
-                "etc_hours": st.column_config.TextColumn("ETC"),
-                "hours_incurred": st.column_config.TextColumn("Incurridas"),
-                "hours_granted": st.column_config.TextColumn("Concedidas"),
+                "hours_incurred": st.column_config.TextColumn("Total incurrido"),
+                "hours_granted": st.column_config.TextColumn("Total concedido"),
+                "etc_hours": st.column_config.TextColumn("EAC"),
+                "inc_vs_eac": st.column_config.TextColumn("Inc vs. EAC"),
             },
         )
         st.download_button(
             "Descargar CSV",
             data=excel_csv_bytes(selected_projects[
                 ["project_code", "description", "management_group",
-                 "etc_hours", "hours_incurred", "hours_granted"]
+                 "hours_incurred", "hours_granted", "etc_hours", "inc_vs_eac"]
             ]),
-            file_name="etc_proyectos.csv",
+            file_name="eac_proyectos.csv",
             mime="text/csv; charset=utf-8",
             key="csv_etc_proyectos",
         )
@@ -338,13 +342,13 @@ def chart(frame, category):
     """Barras por director verticales y por proyecto horizontales."""
     data = frame.melt(
         id_vars=[category],
-        value_vars=["etc_hours", "hours_incurred", "hours_granted"],
+        value_vars=["etc_hours", "hours_granted", "hours_incurred"],
         var_name="serie", value_name="horas",
     )
     data["serie"] = data["serie"].map({
-        "etc_hours": "ETC",
-        "hours_incurred": "Incurridas",
+        "etc_hours": "EAC",
         "hours_granted": "Concedidas",
+        "hours_incurred": "Incurridas",
     })
     data = data.dropna(subset=["horas"])
     if data.empty:
@@ -361,13 +365,13 @@ def chart(frame, category):
         orientation="h" if horizontal else "v",
         barmode="group",
         color_discrete_map={
-            "ETC": "#D5A547",
-            "Incurridas": "#1F4E8C",
+            "EAC": "#D5A547",
             "Concedidas": "#70B7EA",
+            "Incurridas": "#1F4E8C",
         },
         category_orders={
             category: ordered_codes,
-            "serie": ["ETC", "Incurridas", "Concedidas"],
+            "serie": ["EAC", "Concedidas", "Incurridas"],
         },
         labels={
             category: "Director" if category == "management_group" else "Proyecto",
