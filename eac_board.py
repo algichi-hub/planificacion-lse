@@ -288,9 +288,7 @@ def render(url):
         key=f"eac_project_director_{selected}",
         help="Selecciona la agrupación cuyos proyectos quieres visualizar.",
     )
-    selected_projects = joined.loc[joined["management_group"] == director].copy()
-    # Positivo = incurridas por encima del EAC; sin EAC no se calcula desviación.
-    selected_projects["inc_vs_eac"] = selected_projects["hours_incurred"] - selected_projects["etc_hours"]
+    selected_projects = project_comparison(joined.loc[joined["management_group"] == director])
     chart(selected_projects, "project_code")
     st.caption("Inc vs. EAC = Total incurrido − EAC. Positivo indica exceso; sin EAC, diferencia vacía.")
     # Representación de consulta compatible con Excel; editor EAC continúa numérico.
@@ -328,6 +326,13 @@ def render(url):
         )
 
     render_selection_etc_proyectos()
+
+
+def project_comparison(frame):
+    """Display-only project delta: positive means incurred hours exceed EAC."""
+    result = frame.copy()
+    result["inc_vs_eac"] = result["hours_incurred"] - result["etc_hours"]
+    return result
 
 
 def chart(frame, category):
