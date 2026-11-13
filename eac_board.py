@@ -279,6 +279,24 @@ def render(url):
         .sort_values("management_group")
     )
     chart(summary, "management_group")
+    # El gráfico usa el agregado original; la tabla calcula la diferencia sin tocarlo.
+    director_table = project_comparison(summary)
+    # Sin EAC en algún proyecto del director, su total EAC sería parcial.
+    incomplete = joined.groupby("management_group")["etc_hours"].apply(lambda values: values.isna().any())
+    director_table.loc[director_table["management_group"].map(incomplete), "inc_vs_eac"] = float("nan")
+    st.caption("Inc vs. EAC = Total incurrido − EAC. Sin EAC en algún proyecto del director, la diferencia queda vacía.")
+    comparison_table(
+        director_table,
+        {
+            "management_group": "Director",
+            "hours_incurred": "Total incurrido",
+            "hours_granted": "Total concedido",
+            "etc_hours": "EAC",
+            "inc_vs_eac": "Inc vs. EAC",
+        },
+        "eac_directores.csv",
+        "eac_directores",
+    )
 
     st.divider()
     st.subheader("EAC por proyecto")
@@ -291,48 +309,50 @@ def render(url):
     selected_projects = project_comparison(joined.loc[joined["management_group"] == director])
     chart(selected_projects, "project_code")
     st.caption("Inc vs. EAC = Total incurrido − EAC. Positivo indica exceso; sin EAC, diferencia vacía.")
-    # Representación de consulta compatible con Excel; editor EAC continúa numérico.
-    @st.fragment
-    def render_selection_etc_proyectos():
-        st.dataframe(
-            excel_copy_frame(selected_projects[
-                ["project_code", "description", "management_group",
-                 "hours_incurred", "hours_granted", "etc_hours", "inc_vs_eac"]
-            ]),
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="multi-cell",
-            key="select_etc_proyectos",
-            use_container_width=True,
-            column_config={
-                "project_code": st.column_config.TextColumn("Proyecto"),
-                "description": st.column_config.TextColumn("Descripción"),
-                "management_group": st.column_config.TextColumn("Director"),
-                "hours_incurred": st.column_config.TextColumn("Total incurrido"),
-                "hours_granted": st.column_config.TextColumn("Total concedido"),
-                "etc_hours": st.column_config.TextColumn("EAC"),
-                "inc_vs_eac": st.column_config.TextColumn("Inc vs. EAC"),
-            },
-        )
-        st.download_button(
-            "Descargar CSV",
-            data=excel_csv_bytes(selected_projects[
-                ["project_code", "description", "management_group",
-                 "hours_incurred", "hours_granted", "etc_hours", "inc_vs_eac"]
-            ]),
-            file_name="eac_proyectos.csv",
-            mime="text/csv; charset=utf-8",
-            key="csv_etc_proyectos",
-        )
-
-    render_selection_etc_proyectos()
+    # El mismo componente de consulta y exportación utilizado por directores.
+    comparison_table(
+        selected_projects,
+        {
+            "project_code": "Proyecto",
+            "description": "Descripción",
+            "management_group": "Director",
+            "hours_incurred": "Total incurrido",
+            "hours_granted": "Total concedido",
+            "etc_hours": "EAC",
+            "inc_vs_eac": "Inc vs. EAC",
+        },
+        "eac_proyectos.csv",
+        "etc_proyectos",
+    )
 
 
 def project_comparison(frame):
-    """Display-only project delta: positive means incurred hours exceed EAC."""
+    """Display-only EAC delta: positive means incurred hours exceed EAC."""
     result = frame.copy()
     result["inc_vs_eac"] = result["hours_incurred"] - result["etc_hours"]
     return result
+
+
+@st.fragment
+def comparison_table(frame, labels, filename, key):
+    """Reusable, database-free table + Spanish-Excel CSV for both EAC views."""
+    columns = list(labels)
+    st.dataframe(
+        excel_copy_frame(frame[columns]),
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="multi-cell",
+        key=f"select_{key}",
+        use_container_width=True,
+        column_config={column: st.column_config.TextColumn(title) for column, title in labels.items()},
+    )
+    st.download_button(
+        "Descargar CSV",
+        data=excel_csv_bytes(frame[columns]),
+        file_name=filename,
+        mime="text/csv; charset=utf-8",
+        key=f"csv_{key}",
+    )
 
 
 def chart(frame, category):
