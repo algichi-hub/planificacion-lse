@@ -280,10 +280,7 @@ def render(url):
     )
     chart(summary, "management_group")
     # El gráfico usa el agregado original; la tabla calcula la diferencia sin tocarlo.
-    director_table = project_comparison(summary)
-    # Sin EAC en algún proyecto del director, su total EAC sería parcial.
-    incomplete = joined.groupby("management_group")["etc_hours"].apply(lambda values: values.isna().any())
-    director_table.loc[director_table["management_group"].map(incomplete), "inc_vs_eac"] = float("nan")
+    director_table = director_comparison(joined, summary)
     st.caption("Inc vs. EAC = Total incurrido − EAC. Sin EAC en algún proyecto del director, la diferencia queda vacía.")
     comparison_table(
         director_table,
@@ -330,6 +327,16 @@ def project_comparison(frame):
     """Display-only EAC delta: positive means incurred hours exceed EAC."""
     result = frame.copy()
     result["inc_vs_eac"] = result["hours_incurred"] - result["etc_hours"]
+    return result
+
+
+def director_comparison(projects, director_totals):
+    """Show no EAC delta when at least one director project lacks EAC."""
+    result = project_comparison(director_totals)
+    incomplete = projects.groupby("management_group")["etc_hours"].apply(
+        lambda values: values.isna().any()
+    )
+    result.loc[result["management_group"].map(incomplete), "inc_vs_eac"] = float("nan")
     return result
 
 
