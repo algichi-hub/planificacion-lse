@@ -58,7 +58,7 @@ class EACComparisonTests(unittest.TestCase):
         self.assertTrue(pd.isna(second["inc_vs_eac"]))
         pd.testing.assert_frame_equal(summary, original)
 
-    def test_director_partial_eac_does_not_yield_false_margin(self):
+    def test_director_partial_eac_calculates_from_available_total(self):
         projects = self.sample()
         projects.loc[1, "etc_hours"] = float("nan")
         summary = projects.groupby("management_group", as_index=False).agg(
@@ -68,7 +68,7 @@ class EACComparisonTests(unittest.TestCase):
         )
         result = director_comparison(projects, summary).set_index("management_group")
         self.assertEqual(result.loc["110040", "etc_hours"], 100.0)
-        self.assertTrue(pd.isna(result.loc["110040", "inc_vs_eac"]))
+        self.assertEqual(result.loc["110040", "inc_vs_eac"], 90.0)
 
     def test_director_excel_csv_column_order(self):
         projects = self.sample()
