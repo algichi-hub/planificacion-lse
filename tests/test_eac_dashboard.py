@@ -84,6 +84,45 @@ class EACComparisonTests(unittest.TestCase):
         self.assertEqual(rows[1], "110040;190,00;220,00;200,00;-10,00")
         self.assertEqual(rows[2], "110050;15,00;20,00;;")
 
+    def test_eac_csv_exports_use_visible_headers(self):
+        from eac_board import comparison_table
+
+        projects = project_comparison(self.sample())
+        cases = [
+            (projects, {
+                "project_code": "Proyecto",
+                "hours_incurred": "Total incurrido",
+                "hours_granted": "Total concedido",
+                "etc_hours": "EAC",
+                "inc_vs_eac": "Inc vs. EAC",
+            }, "Proyecto;Total incurrido;Total concedido;EAC;Inc vs. EAC"),
+        ]
+        totals = projects.groupby("management_group", as_index=False).agg(
+            hours_incurred=("hours_incurred", "sum"),
+            hours_granted=("hours_granted", "sum"),
+            etc_hours=("etc_hours", lambda x: x.sum(min_count=1)),
+        )
+        director = director_comparison(projects, totals)
+        cases.append((director, {
+            "management_group": "Director",
+            "hours_incurred": "Total incurrido",
+            "hours_granted": "Total concedido",
+            "etc_hours": "EAC",
+            "inc_vs_eac": "Inc vs. EAC",
+        }, "Director;Total incurrido;Total concedido;EAC;Inc vs. EAC"))
+        for frame, labels, expected_header in cases:
+            original = frame.copy(deep=True)
+            with self.subTest(expected_header=expected_header), \
+                    patch("eac_board.st.dataframe"), \
+                    patch("eac_board.st.download_button") as download:
+                comparison_table(frame, labels, "eac.csv", "test")
+                csv_data = download.call_args.kwargs["data"]
+                self.assertTrue(csv_data.startswith(b"\\xef\\xbb\\xbf"))
+                rows = csv_data.decode("utf-8-sig").splitlines()
+                self.assertEqual(rows[0], expected_header)
+                self.assertIn(",00", rows[1])
+                pd.testing.assert_frame_equal(frame, original)
+
     def test_charts_order_and_colors_for_both_axes(self):
         data = self.sample()
         expected = ["EAC", "Concedidas", "Incurridas"]
