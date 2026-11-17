@@ -350,7 +350,7 @@ def comparison_table(frame, labels, filename, key):
     )
     st.download_button(
         "Descargar CSV",
-        data=excel_csv_bytes(frame[columns]),
+        data=excel_csv_bytes(frame[columns].rename(columns=labels)),
         file_name=filename,
         mime="text/csv; charset=utf-8",
         key=f"csv_{key}",
