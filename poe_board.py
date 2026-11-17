@@ -271,8 +271,10 @@ def render(url):
                 st.warning("La edición permanece abierta y las celdas no se han descartado.")
     else:
         a, b = st.columns([2, 2])
-        # Keep the annual selector aligned after editing across December/January.
-        state["poe_v5_read_year"] = year
+        # Reconcile only on external year transitions; never overwrite a user's year choice.
+        if state.get("poe_v5_year_anchor") != year:
+            state["poe_v5_read_year"] = year
+            state["poe_v5_year_anchor"] = year
         selected_year = a.number_input("Año", min_value=2000, max_value=2199,
                                        step=1, key="poe_v5_read_year")
         if int(selected_year) != year:
