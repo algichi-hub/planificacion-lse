@@ -116,9 +116,8 @@ class POEV5Tests(unittest.TestCase):
         with patch("poe_board.connect", return_value=db):
             self.assertEqual(save_month("unused", date(2026, 11, 1), changes), 2)
         self.assertEqual(len(db.queries), 3)  # advisory lock + read + batch upsert
-        self.assertTrue(all(
-            "poe_" in q for q, _ in db.queries
-        ))
+        self.assertIn("pg_advisory_xact_lock", db.queries[0][0])
+        self.assertTrue(all("poe_monthly_hours" in q for q, _ in db.queries[1:]))
         self.assertFalse(any(
             "UPDATE projects" in q or "eac_" in q or "fact_hours" in q
             for q, _ in db.queries
