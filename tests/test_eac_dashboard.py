@@ -113,7 +113,7 @@ class EACComparisonTests(unittest.TestCase):
             with self.subTest(expected_header=expected_header), \
                     patch("eac_board.st.dataframe"), \
                     patch("eac_board.st.download_button") as download:
-                comparison_table(frame, labels, "eac.csv", "test")
+                comparison_table.__wrapped__(frame, labels, "eac.csv", "test")
                 csv_data = download.call_args.kwargs["data"]
                 self.assertTrue(csv_data.startswith(b"\xef\xbb\xbf"))
                 rows = csv_data.decode("utf-8-sig").splitlines()
