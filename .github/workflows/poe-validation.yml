@@ -1,0 +1,19 @@
+name: POE validation
+on:
+  push:
+    branches: [feature/poe-board]
+  workflow_dispatch:
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile all Python
+        run: python -m compileall -q app.py eac_board.py poe_board.py scripts tests
+      - name: Run all regression tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
