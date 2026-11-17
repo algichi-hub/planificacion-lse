@@ -36,7 +36,7 @@ class EACComparisonTests(unittest.TestCase):
         self.assertEqual(lines[1], "A;110,00;100,00;-10,00")
         self.assertEqual(lines[2], "B;80,00;100,00;20,00")
         self.assertEqual(lines[3], "C;15,00;;")
-        self.assertEqual(excel_copy_frame(result[columns])["etc_remaining"].iloc[0], "10,00")
+        self.assertEqual(excel_copy_frame(result[columns])["etc_remaining"].iloc[0], "-10,00")
 
     def test_director_aggregate_and_incomplete_eac(self):
         projects = self.sample()
