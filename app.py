@@ -35,13 +35,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 view = str(st.query_params.get("view", "home")).lower()
-if view not in {"home", "risks", "eac"}:
+if view not in {"home", "risks", "eac", "poe"}:
     view = "home"
 
 st.title(
     "Planificación"
     if view == "home"
-    else ("Análisis de riesgos" if view == "risks" else "EAC trimestrales")
+    else ("Análisis de riesgos" if view == "risks" else ("EAC trimestrales" if view == "eac" else "POE mensual"))
 )
 
 # Material Symbols font for the bottom navigation icons.
@@ -102,6 +102,10 @@ bottom_nav = st.components.v2.component(
         <a href="?view=eac" data-view="eac">
             <span class="icon">edit_note</span>
             <span>EAC</span>
+        </a>
+        <a href="?view=poe" data-view="poe">
+            <span class="icon">view_timeline</span>
+            <span>POE</span>
         </a>
     </nav>
     """,
@@ -195,6 +199,10 @@ def query(sql: str, params=()) -> pd.DataFrame:
 
 if view == "eac":
     from eac_board import render
+    render(DATABASE_URL)
+    st.stop()
+if view == "poe":
+    from poe_board import render
     render(DATABASE_URL)
     st.stop()
 
