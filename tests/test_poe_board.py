@@ -1,9 +1,10 @@
 """POE unit and regression tests; no database credentials required."""
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
-from poe_board import month_shift, parse_hours, grid_frame, apply_grid, validate, to_work
+from poe_board import month_shift, parse_hours, grid_frame, apply_grid, validate, to_work, save
 
 
 class PoeTests(unittest.TestCase):
@@ -69,6 +70,38 @@ class PoeTests(unittest.TestCase):
         work = to_work(record)
         work["hours"][("110040", "2026-11-01")] = "300"
         self.assertEqual(to_work(record)["hours"][("110040", "2026-11-01")], "120")
+
+    def test_atomic_write_is_poe_only_and_fixed_query_count(self):
+        class Db:
+            def __init__(self):
+                self.sql = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def transaction(self):
+                return self
+
+            def execute(self, sql, params=()):
+                self.sql.append(sql)
+                return self
+
+            def fetchone(self):
+                return {"revision": 1}
+
+        db = Db()
+        with patch("poe_board.connect", return_value=db), \
+                patch("poe_board.snapshots.clear"), patch("poe_board.load.clear"):
+            save("unused", 10, self.example())
+        self.assertEqual(len(db.sql), 6)
+        self.assertTrue(all(any(f"poe_{name}" in sql for name in
+                                ("snapshots", "months", "directors", "hours"))
+                            for sql in db.sql))
+        self.assertFalse(any("eac_" in sql or "fact_hours" in sql or "projects" in sql
+                             for sql in db.sql))
 
     def test_elimination_removes_only_local_poe_data(self):
         work = self.example()
