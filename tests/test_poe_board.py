@@ -1,113 +1,155 @@
-"""POE unit and regression tests; no database credentials required."""
+"""POE V5 unit tests; all data writes to Neon are separately validated on test branch."""
 import unittest
+from datetime import date
+from decimal import Decimal
 from unittest.mock import patch
 
 import pandas as pd
 
-from poe_board import month_shift, parse_hours, grid_frame, apply_grid, validate, to_work, save
+from poe_board import (
+    LIME, MONTHS, month_shift, parse_hours, unpack_year, month_frame, month_changes,
+    update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
+)
 
 
-class PoeTests(unittest.TestCase):
-    def example(self):
+class POEV5Tests(unittest.TestCase):
+    def data(self):
         return {
-            "revision": 0,
-            "status": "draft",
-            "directors": ["110040", "110050"],
-            "months": {"2026-11-01": "real", "2026-12-01": "previsto",
-                       "2027-01-01": "previsto"},
-            "hours": {("110040", "2026-11-01"): "120.00",
-                      ("110050", "2026-11-01"): "40.00"},
+            "directors": {
+                "110040": "PROGRAMA VCR8X8 DRAGON SERIE",
+                "310008": "MODERNIZACIÓN PIZARRO",
+            },
+            "hours": {
+                ("110040", date(2026, 11, 1)): (Decimal("0"), Decimal("200")),
+                ("310008", date(2026, 11, 1)): (None, Decimal("100")),
+            },
         }
 
-    def test_month_extension_through_year_and_six_years(self):
-        self.assertEqual(month_shift(pd.Timestamp("2026-12-01").date(), 1).isoformat(),
-                         "2027-01-01")
-        self.assertEqual(month_shift(pd.Timestamp("2026-01-01").date(), -1).isoformat(),
-                         "2025-12-01")
-        self.assertEqual(month_shift(pd.Timestamp("2026-11-01").date(), 72).isoformat(),
-                         "2032-11-01")
+    def test_calendar_across_year_and_six_years(self):
+        self.assertEqual(month_shift(date(2026, 12, 1), 1), date(2027, 1, 1))
+        self.assertEqual(month_shift(date(2027, 1, 1), -1), date(2026, 12, 1))
+        self.assertEqual(month_shift(date(2026, 11, 1), 72), date(2032, 11, 1))
+        self.assertEqual(len(MONTHS), 12)
 
-    def test_excel_paste_rectangular_block(self):
-        work = self.example()
-        periods = sorted(work["months"])
-        pasted = grid_frame(work, periods)
-        pasted.loc[:, periods] = [[120, 250, 350], [40, 75, 110]]
-        apply_grid(work, pasted, periods)
-        self.assertEqual(work["hours"][("110040", "2027-01-01")], "350.0")
-        self.assertEqual(work["hours"][("110050", "2026-12-01")], "75.0")
-        self.assertEqual(len(validate(work)), 6)
+    def test_excel_paste_two_columns_all_directors(self):
+        data = self.data()
+        frame = month_frame(data, date(2026, 11, 1))
+        frame[["Real (h)", "Previsto (h)"]] = [[125, 140], [205, 210]]
+        changes = month_changes(data, date(2026, 11, 1), frame)
+        self.assertEqual(len(changes), 2)
+        self.assertEqual(changes[0][2], (Decimal("125"), Decimal("140")))
+        self.assertEqual(changes[1][2], (Decimal("205"), Decimal("210")))
+        update_local(data, date(2026, 11, 1), changes)
+        self.assertEqual(data["hours"][("110040", date(2026, 11, 1))][0],
+                         Decimal("125"))
 
-    def test_missing_vs_zero_and_span_changes(self):
-        work = self.example()
-        frame = grid_frame(work, sorted(work["months"]))
-        self.assertTrue(pd.isna(frame.loc[0, "2026-12-01"]))
-        frame.loc[0, "2026-12-01"] = 0
-        apply_grid(work, frame, sorted(work["months"]))
-        self.assertEqual(work["hours"][("110040", "2026-12-01")], "0.0")
-        work["months"]["2027-02-01"] = "previsto"
-        self.assertTrue(pd.isna(grid_frame(work, ["2027-02-01"]).iloc[0, 1]))
+    def test_real_zero_precedes_forecast_and_lime_only_for_real(self):
+        frame, colors = annual_frame(self.data(), 2026)
+        self.assertEqual(frame.loc[0, "NOV"], 0)
+        self.assertEqual(frame.loc[1, "NOV"], 100)
+        self.assertIn(LIME, colors.loc[0, "NOV"])
+        self.assertEqual(colors.loc[1, "NOV"], "")
+        self.assertTrue(pd.isna(frame.loc[0, "ENE"]))
+        self.assertEqual(len(frame.columns), 13)
+        self.assertEqual(len(style_annual(self.data(), 2026).to_html()) > 0, True)
 
-    def test_kind_switch_does_not_change_hours(self):
-        work = self.example()
-        old = work["hours"].copy()
-        work["months"]["2026-12-01"] = "real"
-        self.assertEqual(work["hours"], old)
+    def test_no_data_not_converted_to_zero(self):
+        data = self.data()
+        frame = month_frame(data, date(2026, 12, 1))
+        self.assertTrue(pd.isna(frame.loc[0, "Real (h)"]))
+        self.assertTrue(pd.isna(frame.loc[0, "Previsto (h)"]))
+        self.assertEqual(month_changes(data, date(2026, 12, 1), frame), [])
 
-    def test_decimal_validation(self):
-        self.assertEqual(str(parse_hours("120,25")), "120.25")
+    def test_clear_one_field_without_changing_other(self):
+        data = self.data()
+        frame = month_frame(data, date(2026, 11, 1))
+        frame.loc[0, "Real (h)"] = float("nan")
+        changes = month_changes(data, date(2026, 11, 1), frame)
+        self.assertEqual(changes, [
+            ("110040", (Decimal("0"), Decimal("200")), (None, Decimal("200")))
+        ])
+
+    def test_decimal_rejection(self):
+        self.assertEqual(parse_hours("120,25"), Decimal("120.25"))
         self.assertIsNone(parse_hours(""))
-        for bad in ["-1", "nan", "Infinity", "1,234", "bad"]:
+        self.assertEqual(parse_hours(0), Decimal(0))
+        for bad in ("-1", "nan", "Infinity", "1,234", "bad"):
             with self.subTest(value=bad), self.assertRaises(ValueError):
                 parse_hours(bad)
 
-    def test_restore_from_snapshot(self):
-        record = {
-            "revision": 3, "status": "draft",
-            "months": [{"period": "2026-11-01", "kind": "real"}],
-            "directors": ["110040"],
-            "hours": [{"director": "110040", "period": "2026-11-01", "hours": 120}],
-        }
-        work = to_work(record)
-        work["hours"][("110040", "2026-11-01")] = "300"
-        self.assertEqual(to_work(record)["hours"][("110040", "2026-11-01")], "120")
+    def test_director_catalog_stable_after_source_absent(self):
+        rows = [
+            {"code": "110040", "name": "PROGRAMA VCR8X8 DRAGON SERIE",
+             "period": None, "real_hours": None, "planned_hours": None},
+            {"code": "310008", "name": "MODERNIZACIÓN PIZARRO",
+             "period": None, "real_hours": None, "planned_hours": None},
+        ]
+        data = unpack_year(rows)
+        self.assertEqual(len(data["directors"]), 2)
+        self.assertIn("310008", data["directors"])
 
-    def test_atomic_write_is_poe_only_and_fixed_query_count(self):
-        class Db:
+    def test_no_op_save_skips_database(self):
+        with patch("poe_board.connect") as connection:
+            self.assertEqual(save_month("unused", date(2026, 11, 1), []), 0)
+            connection.assert_not_called()
+
+    def test_write_queries_only_poe_and_constant_per_month(self):
+        class DB:
             def __init__(self):
-                self.sql = []
-
+                self.queries = []
             def __enter__(self):
                 return self
-
             def __exit__(self, *args):
                 return False
-
             def transaction(self):
                 return self
-
-            def execute(self, sql, params=()):
-                self.sql.append(sql)
+            def execute(self, sql, args=()):
+                self.queries.append((sql, args))
                 return self
+            def fetchall(self):
+                return []
+        db = DB()
+        changes = [
+            ("110040", (None, None), (Decimal("10"), Decimal("30"))),
+            ("310008", (None, None), (Decimal("20"), Decimal("40"))),
+        ]
+        with patch("poe_board.connect", return_value=db):
+            self.assertEqual(save_month("unused", date(2026, 11, 1), changes), 2)
+        self.assertEqual(len(db.queries), 3)  # advisory lock + read + batch upsert
+        self.assertTrue(all(
+            "poe_" in q for q, _ in db.queries
+        ))
+        self.assertFalse(any(
+            "UPDATE projects" in q or "eac_" in q or "fact_hours" in q
+            for q, _ in db.queries
+        ))
 
-            def fetchone(self):
-                return {"revision": 1}
+    def test_concurrent_edit_refused_before_write(self):
+        class DB:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def transaction(self):
+                return self
+            def execute(self, sql, args=()):
+                self.last = sql
+                return self
+            def fetchall(self):
+                return [{"code": "110040", "real_hours": Decimal("999"),
+                         "planned_hours": None}]
+        with patch("poe_board.connect", return_value=DB()):
+            with self.assertRaisesRegex(ValueError, "Conflicto"):
+                save_month("unused", date(2026, 11, 1), [
+                    ("110040", (None, None), (Decimal("100"), None))
+                ])
 
-        db = Db()
-        with patch("poe_board.connect", return_value=db), \
-                patch("poe_board.snapshots.clear"), patch("poe_board.load.clear"):
-            save("unused", 10, self.example())
-        self.assertEqual(len(db.sql), 6)
-        self.assertTrue(all(any(f"poe_{name}" in sql for name in
-                                ("snapshots", "months", "directors", "hours"))
-                            for sql in db.sql))
-        self.assertFalse(any("eac_" in sql or "fact_hours" in sql or "projects" in sql
-                             for sql in db.sql))
-
-    def test_elimination_removes_only_local_poe_data(self):
-        work = self.example()
-        work["directors"].remove("110050")
-        work["hours"] = {k: v for k, v in work["hours"].items() if k[0] != "110050"}
-        self.assertEqual(len(validate(work)), 1)
+    def test_order_guard_prevents_cross_director_paste(self):
+        data = self.data()
+        frame = month_frame(data, date(2026, 11, 1))
+        frame.loc[0, "Director"] = "MODERNIZACIÓN PIZARRO"
+        with self.assertRaises(ValueError):
+            month_changes(data, date(2026, 11, 1), frame)
 
 
 if __name__ == "__main__":
