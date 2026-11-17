@@ -281,15 +281,14 @@ def render(url):
     chart(summary, "management_group")
     # El gráfico usa el agregado original; la tabla calcula la diferencia sin tocarlo.
     director_table = director_comparison(joined, summary)
-    st.caption("Inc vs. EAC = Total incurrido − EAC. Se calcula si ambos totales están disponibles.")
+    st.caption("ETC = EAC − Total incurrido. Se calcula si ambos totales están disponibles.")
     comparison_table(
         director_table,
         {
             "management_group": "Director",
             "hours_incurred": "Total incurrido",
-            "hours_granted": "Total concedido",
             "etc_hours": "EAC",
-            "inc_vs_eac": "Inc vs. EAC",
+            "etc_remaining": "ETC",
         },
         "eac_directores.csv",
         "eac_directores",
@@ -305,7 +304,7 @@ def render(url):
     )
     selected_projects = project_comparison(joined.loc[joined["management_group"] == director])
     chart(selected_projects, "project_code")
-    st.caption("Inc vs. EAC = Total incurrido − EAC. Positivo indica exceso; sin EAC, diferencia vacía.")
+    st.caption("ETC = EAC − Total incurrido. Negativo indica exceso; sin EAC, ETC vacío.")
     # El mismo componente de consulta y exportación utilizado por directores.
     comparison_table(
         selected_projects,
@@ -314,9 +313,8 @@ def render(url):
             "description": "Descripción",
             "management_group": "Director",
             "hours_incurred": "Total incurrido",
-            "hours_granted": "Total concedido",
             "etc_hours": "EAC",
-            "inc_vs_eac": "Inc vs. EAC",
+            "etc_remaining": "ETC",
         },
         "eac_proyectos.csv",
         "etc_proyectos",
@@ -324,14 +322,14 @@ def render(url):
 
 
 def project_comparison(frame):
-    """Display-only EAC delta: positive means incurred hours exceed EAC."""
+    """Display-only remaining hours: EAC minus incurred hours."""
     result = frame.copy()
-    result["inc_vs_eac"] = result["hours_incurred"] - result["etc_hours"]
+    result["etc_remaining"] = result["etc_hours"] - result["hours_incurred"]
     return result
 
 
 def director_comparison(projects, director_totals):
-    """Compare aggregated incurred hours against recorded director EAC."""
+    """Calculate remaining hours for each director aggregate."""
     return project_comparison(director_totals)
 
 
