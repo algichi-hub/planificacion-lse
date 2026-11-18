@@ -9,7 +9,7 @@ import pandas as pd
 from poe_board import (
     LIME, MONTHS, month_shift, parse_hours, unpack_year, month_frame, month_changes,
     update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
-    restore_pending_cells, queue_action,
+    restore_pending_cells, queue_action, visibility_changes,
 )
 
 
@@ -206,6 +206,61 @@ class POEV5Tests(unittest.TestCase):
             queue_action("next")
             queue_action("prev")
         self.assertEqual(state["poe_v5_action"], "next")
+
+    def test_visibility_checkbox_affects_only_read_mode(self):
+        data = self.data()
+        data["visible"] = {"110040": True, "310008": False}
+        editor = month_frame(data, date(2026, 11, 1))
+        self.assertEqual(editor["Visible"].tolist(), [True, False])
+        read, _ = annual_frame(data, 2026)
+        self.assertEqual(read["Director"].tolist(), ["PROGRAMA VCR8X8 DRAGON SERIE"])
+        self.assertEqual(len(data["hours"]), 2)  # Hidden row retains all hours.
+
+    def test_visibility_multi_selection_and_no_hour_changes(self):
+        data = self.data()
+        editor = month_frame(data, date(2026, 11, 1))
+        editor.loc[:, "Visible"] = [False, False]
+        changed = visibility_changes(data, editor)
+        self.assertEqual(changed, [("110040", True, False), ("310008", True, False)])
+        self.assertEqual(month_changes(data, date(2026, 11, 1), editor), [])
+        update_local(data, date(2026, 11, 1), [], changed)
+        self.assertEqual(len(annual_frame(data, 2026)[0]), 0)
+        self.assertEqual(len(month_frame(data, date(2026, 11, 1))), 2)
+
+    def test_integer_display_does_not_mutate_decimal_storage(self):
+        data = self.data()
+        formatted = style_annual(data, 2026).to_html()
+        self.assertIn(">200<", formatted)
+        self.assertNotIn("200.00", formatted)
+        self.assertEqual(data["hours"][("110040", date(2026, 11, 1))][1], Decimal("200"))
+
+    def test_visibility_only_atomic_write_and_query_scope(self):
+        class DB:
+            def __init__(self):
+                self.queries = []
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def transaction(self):
+                return self
+            def execute(self, sql, args=()):
+                self.queries.append(sql)
+                return self
+            def fetchall(self):
+                if "SELECT code,visible" in self.queries[-1]:
+                    return [{"code": "110040", "visible": True}]
+                return []
+        db = DB()
+        with patch("poe_board.connect", return_value=db):
+            changed = save_month("unused", date(2026, 11, 1), [],
+                                 [("110040", True, False)])
+        self.assertEqual(changed, 1)
+        self.assertEqual(len(db.queries), 4)  # advisory, hours read, visibility read, visibility write
+        self.assertTrue(all("poe_" in q for q in db.queries[1:]))
+        self.assertTrue(any("UPDATE poe_directors" in q for q in db.queries))
+        self.assertFalse(any("UPDATE projects" in q or "UPDATE eac_" in q
+                             for q in db.queries))
 
     def test_order_guard_prevents_cross_director_paste(self):
         data = self.data()
