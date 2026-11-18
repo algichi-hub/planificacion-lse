@@ -264,6 +264,12 @@ def render(url):
         state["poe_v5_editing"] = False
     if "poe_v5_grid_serial" not in state:
         state["poe_v5_grid_serial"] = 0
+    # Correct legacy sessions whose uninitialized year selector fell back to 2000.
+    if not state.get("poe_v5_current_year_fix"):
+        if state["poe_v5_period"].year == 2000 and not state["poe_v5_editing"]:
+            today = date.today()
+            state["poe_v5_period"] = date(today.year, today.month, 1)
+        state["poe_v5_current_year_fix"] = True
     period = state["poe_v5_period"]
     year = period.year
     cache = state["poe_v5_cache"]
