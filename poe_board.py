@@ -442,6 +442,10 @@ def render(url):
                     for other_year, other_data in cache.items():
                         if other_year != year:
                             update_local(other_data, period, [], v_changes)
+                    # Real hours registered in a past year affect the current
+                    # year's opening balance. Invalidate it only when necessary.
+                    if changes and year < date.today().year:
+                        cache.pop(date.today().year, None)
                 state.pop("poe_v5_retry_cells", None)
                 state.pop("poe_v5_retry_period", None)
                 if action in ("prev", "next"):
