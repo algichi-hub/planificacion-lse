@@ -346,7 +346,7 @@ def render_annual_chart(url, data, year):
                              mode="lines+markers", connectgaps=False,
                              line=dict(color="#198754", width=3)))
     fig.update_layout(height=390, margin=dict(l=15,r=15,t=15,b=10),
-                      xaxis_title=None,yaxis_title="Horas acumuladas",
+                      xaxis_title=None,yaxis_title=None,
                       legend=dict(orientation="h",y=-0.2),hovermode="x unified")
     st.subheader(f"Evolución {year} · {data['directors'][code]}")
     st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}")
@@ -506,16 +506,8 @@ def render(url):
         st.caption("Verde lima = real registrado (incluye cero). Sin fondo = previsto o vacío.")
         st.dataframe(style_annual(data, year), hide_index=True,
                      use_container_width=True)
-        # Always show the system's current calendar year, independently of the
-        # year chosen for the table. Reuse that year's cached POE data.
-        chart_year = date.today().year
-        if chart_year not in cache:
-            try:
-                cache[chart_year] = unpack_year(load_year(url, chart_year))
-            except psycopg.Error as exc:
-                st.warning(f"No se pudo cargar la gráfica: {type(exc).__name__}")
-        if chart_year in cache:
-            render_annual_chart(url, cache[chart_year], chart_year)
+        # Reuse the selected year's data already loaded for the annual table.
+        render_annual_chart(url, data, year)
         refresh, sync = st.columns(2)
         if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
             state["poe_v5_cache"] = {}
