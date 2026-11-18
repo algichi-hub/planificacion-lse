@@ -76,6 +76,43 @@ class POEV5Tests(unittest.TestCase):
         # No additional year is loaded just to draw the plot.
         self.assertNotIn("chart_year", inspect.getsource(render))
 
+    def test_chart_fixed_zero_minimum_and_navigation_locked(self):
+        data = {"directors": {"110040": "DRAGON"}, "visible": {"110040": True},
+                "opening": {"110040": None}, "opening_count": {"110040": 0},
+                "hours": {("110040", date(2025, 1, 1)): (Decimal(0), None),
+                          ("110040", date(2025, 2, 1)): (Decimal(977), None)}}
+        eac = {"year": 2026, "quarter": 3, "eac_hours": Decimal(48526),
+               "projects": 4}
+        with patch("poe_board.director_eac", return_value=eac), \
+             patch("poe_board.st.plotly_chart") as chart, \
+             patch("poe_board.st.subheader"), \
+             patch("poe_board.st.caption"):
+            render_annual_chart("unused", data, 2025)
+        figure = chart.call_args.args[0]
+        self.assertEqual(figure.layout.yaxis.range[0], 0)
+        self.assertGreater(figure.layout.yaxis.range[1], 48526)
+        self.assertTrue(figure.layout.yaxis.fixedrange)
+        self.assertTrue(figure.layout.xaxis.fixedrange)
+        self.assertFalse(figure.layout.dragmode)
+        self.assertEqual(figure.layout.hovermode, "x unified")
+        self.assertEqual(chart.call_args.kwargs["config"],
+                         {"displayModeBar": False, "scrollZoom": False,
+                          "doubleClick": False})
+
+    def test_empty_chart_still_starts_at_zero(self):
+        data = {"directors": {"A": "DIRECTOR"}, "visible": {"A": True},
+                "opening": {"A": None}, "opening_count": {"A": 0},
+                "hours": {}}
+        with patch("poe_board.director_eac", return_value=None), \
+             patch("poe_board.st.plotly_chart") as chart, \
+             patch("poe_board.st.subheader"), \
+             patch("poe_board.st.warning"), \
+             patch("poe_board.st.caption"):
+            render_annual_chart("unused", data, 2025)
+        figure = chart.call_args.args[0]
+        self.assertEqual(figure.layout.yaxis.range[0], 0)
+        self.assertGreater(figure.layout.yaxis.range[1], 0)
+
     def test_chart_omits_vertical_axis_title(self):
         tree = ast.parse(inspect.getsource(render_annual_chart))
         layouts = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
