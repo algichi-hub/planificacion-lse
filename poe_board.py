@@ -345,11 +345,19 @@ def render_annual_chart(url, data, year):
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
                              mode="lines+markers", connectgaps=False,
                              line=dict(color="#198754", width=3)))
+    upper = max(1, *(float(value) for value in
+                     ([reference["eac_hours"]] if reference and reference["eac_hours"] is not None else [])
+                     + [value for value in actual + forecast if value is not None])) * 1.05
     fig.update_layout(height=390, margin=dict(l=15,r=15,t=15,b=10),
                       xaxis_title=None,yaxis_title=None,
+                      xaxis=dict(fixedrange=True),
+                      yaxis=dict(range=[0, upper], fixedrange=True),
+                      dragmode=False,
                       legend=dict(orientation="h",y=-0.2),hovermode="x unified")
     st.subheader(f"Evolución {year} · {data['directors'][code]}")
-    st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}")
+    st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}",
+                    config={"displayModeBar": False, "scrollZoom": False,
+                            "doubleClick": False})
     if reference:
         st.caption(f"EAC {reference['year']} Q{reference['quarter']} · "
                    f"{reference['eac_hours']:,.0f} h · {reference['projects']} proyectos.")
