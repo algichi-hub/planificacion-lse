@@ -321,6 +321,10 @@ def render(url):
                     with st.spinner("Guardando POE..."):
                         save_month(url, period, changes, v_changes)
                     update_local(data, period, changes, v_changes)
+                    # Visibility is global to each director, not specific to a year.
+                    for other_year, other_data in cache.items():
+                        if other_year != year:
+                            update_local(other_data, period, [], v_changes)
                 state.pop("poe_v5_retry_cells", None)
                 state.pop("poe_v5_retry_period", None)
                 if action in ("prev", "next"):
