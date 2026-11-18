@@ -1,5 +1,7 @@
 """POE V5 unit tests; all data writes to Neon are separately validated on test branch."""
 import unittest
+import ast
+import inspect
 from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
@@ -9,7 +11,7 @@ import pandas as pd
 from poe_board import (
     LIME, MONTHS, month_shift, parse_hours, unpack_year, month_frame, month_changes,
     update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
-    restore_pending_cells, queue_action, visibility_changes,
+    restore_pending_cells, queue_action, visibility_changes, render,
 )
 
 
@@ -25,6 +27,28 @@ class POEV5Tests(unittest.TestCase):
                 ("310008", date(2026, 11, 1)): (None, Decimal("100")),
             },
         }
+
+    def test_read_year_widget_defaults_to_selected_year(self):
+        # Prevent Streamlit from implicitly defaulting to min_value=2000.
+        tree = ast.parse(inspect.getsource(render))
+        selectors = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "number_input"
+            and node.args and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "Año"
+        ]
+        self.assertEqual(len(selectors), 1)
+        values = {item.arg: item.value for item in selectors[0].keywords}
+        self.assertIsInstance(values.get("value"), ast.Name)
+        self.assertEqual(values["value"].id, "year")
+        self.assertNotEqual(values["value"].id, "min_value")
+
+    def test_annual_view_contains_all_twelve_natural_months(self):
+        frame, _ = annual_frame(self.data(), date.today().year)
+        self.assertEqual(frame.columns.tolist(), ["Director", *MONTHS])
+        self.assertEqual(len(MONTHS), 12)
 
     def test_calendar_across_year_and_six_years(self):
         self.assertEqual(month_shift(date(2026, 12, 1), 1), date(2027, 1, 1))
