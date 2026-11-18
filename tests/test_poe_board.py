@@ -11,7 +11,8 @@ import pandas as pd
 from poe_board import (
     LIME, MONTHS, month_shift, parse_hours, unpack_year, month_frame, month_changes,
     update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
-    restore_pending_cells, queue_action, visibility_changes, render,\n    annual_evolution, director_eac,
+    restore_pending_cells, queue_action, visibility_changes, render,
+    annual_evolution, director_eac,
 )
 
 
