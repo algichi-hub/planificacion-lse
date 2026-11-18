@@ -12,6 +12,7 @@ from poe_board import (
     LIME, MONTHS, month_shift, parse_hours, unpack_year, month_frame, month_changes,
     update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
     restore_pending_cells, queue_action, visibility_changes, render,
+    annual_evolution, director_eac,
 )
 
 
@@ -49,6 +50,66 @@ class POEV5Tests(unittest.TestCase):
         frame, _ = annual_frame(self.data(), date.today().year)
         self.assertEqual(frame.columns.tolist(), ["Director", *MONTHS])
         self.assertEqual(len(MONTHS), 12)
+
+    def test_2026_dragon_actual_and_forecast_from_neon_sample(self):
+        from decimal import Decimal
+        data = {"directors": {"110040": "DRAGON"}, "visible": {"110040": True},
+                "opening": {"110040": None}, "opening_count": {"110040": 0},
+                "hours": {}}
+        real = [1563, 1752, 1559, 862, 976, 1083, 869, 362, 1054, 918]
+        for month, h in enumerate(real, 1):
+            data["hours"][("110040", date(2026, month, 1))] = (Decimal(h), None)
+        data["hours"][("110040", date(2026, 11, 1))] = (None, Decimal(896))
+        data["hours"][("110040", date(2026, 12, 1))] = (None, Decimal(552))
+        incurred, forecast, last_real, gaps = annual_evolution(data, "110040", 2026)
+        self.assertEqual(last_real, 10)
+        self.assertEqual(incurred[9], 10998)
+        self.assertEqual(forecast[10:], [11894, 12446])
+        self.assertEqual(gaps, [])
+
+    def test_manual_opening_real_includes_previous_year(self):
+        data = {"hours": {("A", date(2026, 1, 1)): (Decimal(100), None),
+                          ("A", date(2026, 2, 1)): (None, Decimal(50))},
+                "opening": {"A": Decimal(700)}, "opening_count": {"A": 1}}
+        actual, planned, last_actual, gaps = annual_evolution(data, "A", 2026)
+        self.assertEqual(actual[0], 800)
+        self.assertEqual(planned[1], 850)
+        self.assertEqual(last_actual, 1)
+        self.assertIn(3, gaps)
+
+    def test_zero_is_valid_real_and_gaps_not_replaced_by_zero(self):
+        data = {"hours": {("A", date(2026, 1, 1)): (Decimal(0), None),
+                          ("A", date(2026, 3, 1)): (Decimal(50), None)},
+                "opening": {}, "opening_count": {}}
+        actual, planned, _, gaps = annual_evolution(data, "A", 2026)
+        self.assertEqual(actual[0], 0)
+        self.assertIsNone(actual[1])
+        self.assertEqual(actual[2], 50)
+        self.assertIn(2, gaps)
+
+    def test_eac_is_read_only_and_single_aggregate_query(self):
+        class DB:
+            def __init__(self):
+                self.calls = []
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, sql, params=()):
+                self.calls.append((sql, params))
+                return self
+            def fetchone(self):
+                return {"year": 2026, "quarter": 3, "eac_hours": Decimal(48526), "projects": 4}
+        db = DB()
+        with patch("poe_board.connect", return_value=db):
+            director_eac.clear()
+            value = director_eac("unused", "110040")
+            self.assertEqual(value["eac_hours"], Decimal(48526))
+        self.assertEqual(len(db.calls), 1)
+        self.assertIn("eac_snapshots", db.calls[0][0])
+        self.assertIn("eac_project_hours", db.calls[0][0])
+        self.assertFalse(any("UPDATE " in sql or "INSERT " in sql or "DELETE " in sql
+                             for sql, _ in db.calls))
 
     def test_calendar_across_year_and_six_years(self):
         self.assertEqual(month_shift(date(2026, 12, 1), 1), date(2027, 1, 1))

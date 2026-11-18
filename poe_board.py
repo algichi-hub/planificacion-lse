@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 import json
 
 import pandas as pd
+import plotly.graph_objects as go
 import psycopg
 from psycopg.rows import dict_row
 import streamlit as st
@@ -69,25 +70,35 @@ def load_year(url, year):
     """Exactly one read; includes archived directors even when no hours exist."""
     with connect(url) as conn:
         return conn.execute("""
-            SELECT d.code, d.name, d.visible, h.period, h.real_hours, h.planned_hours
+            SELECT d.code, d.name, d.visible, h.period, h.real_hours, h.planned_hours,
+                   (SELECT SUM(prev.real_hours) FROM poe_monthly_hours prev
+                    WHERE prev.code=d.code AND prev.period < %s) AS opening_real,
+                   (SELECT COUNT(prev.real_hours) FROM poe_monthly_hours prev
+                    WHERE prev.code=d.code AND prev.period < %s) AS opening_count
             FROM poe_directors d LEFT JOIN poe_monthly_hours h
               ON h.code=d.code AND h.period >= %s AND h.period < %s
             ORDER BY d.code, h.period
-        """, (date(year, 1, 1), date(year + 1, 1, 1))).fetchall()
+        """, (date(year, 1, 1), date(year, 1, 1),
+                 date(year, 1, 1), date(year + 1, 1, 1))).fetchall()
 
 
 def unpack_year(rows):
     directors = {}
     visible = {}
+    opening = {}
+    opening_count = {}
     hours = {}
     for row in rows:
         directors[row["code"]] = row["name"]
         visible[row["code"]] = row.get("visible", True)
+        opening[row["code"]] = row.get("opening_real")
+        opening_count[row["code"]] = int(row.get("opening_count") or 0)
         if row["period"] is not None:
             hours[(row["code"], row["period"])] = (
                 row["real_hours"], row["planned_hours"]
             )
-    return {"directors": directors, "visible": visible, "hours": hours}
+    return {"directors": directors, "visible": visible, "hours": hours,
+            "opening": opening, "opening_count": opening_count}
 
 
 def month_frame(data, period):
@@ -251,6 +262,106 @@ def style_annual(data, year):
     )
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def director_eac(url, code):
+    """Latest published EAC total for this director; one read, no writes."""
+    with connect(url) as conn:
+        return conn.execute("""
+            SELECT s.year,s.quarter, SUM(e.etc_hours) AS eac_hours,
+                   COUNT(e.project_code) AS projects
+            FROM eac_snapshots s
+            LEFT JOIN eac_project_hours e ON e.snapshot_id=s.id
+            LEFT JOIN projects p ON p.project_code=e.project_code
+            WHERE s.status='published' AND s.id=(
+                SELECT id FROM eac_snapshots WHERE status='published'
+                ORDER BY year DESC,quarter DESC LIMIT 1
+            ) AND substring(btrim(p.project_manager) FROM '^[^[:space:]]+')=%s
+            GROUP BY s.id,s.year,s.quarter
+        """, (code,)).fetchone()
+
+
+def annual_evolution(data, code, year):
+    """Cumulative manually incurred hours, then continuation of monthly forecasts."""
+    opening = data.get("opening", {}).get(code)
+    running = Decimal(opening) if opening is not None else Decimal(0)
+    actual, forecast = [], []
+    forecast_started = False
+    gaps = []
+    last_actual = None
+    for month in range(1, 13):
+        period = date(year, month, 1)
+        real, planned = data["hours"].get((code, period), (None, None))
+        if real is not None and not forecast_started:
+            running += real
+            last_actual = month
+            actual.append(float(running))
+            forecast.append(None)
+        elif planned is not None:
+            if not forecast_started and last_actual is not None:
+                # Join the grey forecast line to the last actual point in the plot.
+                forecast_started = True
+            else:
+                forecast_started = True
+            running += planned
+            actual.append(None)
+            forecast.append(float(running))
+        else:
+            actual.append(None)
+            forecast.append(None)
+            gaps.append(month)
+            if forecast_started:
+                # No implied zero consumption for missing future months.
+                break
+    return actual, forecast, last_actual, gaps
+
+
+def render_annual_chart(url, data, year):
+    """Draw one director: the first visible row in the annual POE view."""
+    visible_codes = [c for c in data["directors"]
+                     if data.get("visible", {}).get(c, True)]
+    if not visible_codes:
+        st.info("No hay directores visibles para representar.")
+        return
+    code = visible_codes[0]
+    try:
+        reference = director_eac(url, code)
+    except psycopg.Error as exc:
+        st.warning(f"No se pudo consultar el EAC de referencia: {type(exc).__name__}")
+        reference = None
+
+    actual, forecast, last_actual, gaps = annual_evolution(data, code, year)
+    if last_actual is not None:
+        # Preserve continuity at the real -> forecast boundary.
+        if any(value is not None for value in forecast):
+            forecast[last_actual - 1] = actual[last_actual - 1]
+    fig = go.Figure()
+    if reference and reference["eac_hours"] is not None:
+        fig.add_trace(go.Scatter(x=MONTHS, y=[float(reference["eac_hours"])] * 12,
+                                 name="Límite EAC", mode="lines",
+                                 line=dict(color="#2E9D57", width=2, dash="dash")))
+    fig.add_trace(go.Scatter(x=MONTHS, y=forecast, name="Previsto acumulado",
+                             mode="lines+markers", connectgaps=False,
+                             line=dict(color="#89939B", width=3)))
+    fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
+                             mode="lines+markers", connectgaps=False,
+                             line=dict(color="#198754", width=3)))
+    fig.update_layout(height=390, margin=dict(l=15,r=15,t=15,b=10),
+                      xaxis_title=None,yaxis_title="Horas acumuladas",
+                      legend=dict(orientation="h",y=-0.2),hovermode="x unified")
+    st.subheader(f"Evolución {year} · {data['directors'][code]}")
+    st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}")
+    if reference:
+        st.caption(f"EAC {reference['year']} Q{reference['quarter']} · "
+                   f"{reference['eac_hours']:,.0f} h · {reference['projects']} proyectos.")
+    else:
+        st.warning("Sin EAC publicado para este director; no se muestra límite.")
+    if not data.get("opening_count", {}).get(code):
+        st.caption(f"Sin reales manuales anteriores a enero de {year}: "
+                   "la curva comienza en cero. El acumulado histórico puede estar incompleto.")
+    if gaps:
+        st.caption("Hay meses sin horas registradas; no se consideran ceros automáticos.")
+
+
 def render(url):
     st.subheader("POE mensual")
     st.caption("Horas reales y previstas manuales; lectura de directores EAC, sin modificar OF, bonos ni EAC.")
@@ -331,6 +442,10 @@ def render(url):
                     for other_year, other_data in cache.items():
                         if other_year != year:
                             update_local(other_data, period, [], v_changes)
+                    # Real hours registered in a past year affect the current
+                    # year's opening balance. Invalidate it only when necessary.
+                    if changes and year < date.today().year:
+                        cache.pop(date.today().year, None)
                 state.pop("poe_v5_retry_cells", None)
                 state.pop("poe_v5_retry_period", None)
                 if action in ("prev", "next"):
@@ -391,9 +506,20 @@ def render(url):
         st.caption("Verde lima = real registrado (incluye cero). Sin fondo = previsto o vacío.")
         st.dataframe(style_annual(data, year), hide_index=True,
                      use_container_width=True)
+        # Always show the system's current calendar year, independently of the
+        # year chosen for the table. Reuse that year's cached POE data.
+        chart_year = date.today().year
+        if chart_year not in cache:
+            try:
+                cache[chart_year] = unpack_year(load_year(url, chart_year))
+            except psycopg.Error as exc:
+                st.warning(f"No se pudo cargar la gráfica: {type(exc).__name__}")
+        if chart_year in cache:
+            render_annual_chart(url, cache[chart_year], chart_year)
         refresh, sync = st.columns(2)
         if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
             state["poe_v5_cache"] = {}
+            director_eac.clear()
             st.rerun()
         if sync.button("Sincronizar directores", help="Incorporar directores nuevos desde ERP sin modificar los existentes."):
             try:
