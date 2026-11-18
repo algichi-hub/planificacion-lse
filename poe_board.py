@@ -129,12 +129,19 @@ def save_month(url, period, changes):
                 "WHERE period=%s AND code=ANY(%s) FOR UPDATE", (period, codes)
             ).fetchall()
             actual = {r["code"]: (r["real_hours"], r["planned_hours"]) for r in rows}
-            for code, original, _ in changes:
-                if actual.get(code, (None, None)) != original:
+            # Repeated saves from the same tab are harmless when already applied.
+            pending = []
+            for code, original, desired in changes:
+                current = actual.get(code, (None, None))
+                if current == desired:
+                    continue
+                if current != original:
                     raise ValueError(
                         f"Conflicto en {code}, {period:%m/%Y}: "
-                        "otro usuario ha modificado las horas. Recarga los datos."
+                        "el dato en Neon ha cambiado desde la carga."
                     )
+                pending.append((code, original, desired))
+            changes = pending
             insert = [
                 {"code": code, "real": str(new[0]) if new[0] is not None else None,
                  "planned": str(new[1]) if new[1] is not None else None}
@@ -166,6 +173,26 @@ def update_local(data, period, changes):
             data["hours"].pop((code, period), None)
         else:
             data["hours"][(code, period)] = after
+
+
+def restore_pending_cells(data, period, pending):
+    """Overlay only user-edited cells onto freshly fetched Neon values."""
+    frame = month_frame(data, period)
+    columns = ("Real (h)", "Previsto (h)")
+    for index, code in enumerate(data["directors"]):
+        for column in columns:
+            key = (code, column)
+            if key in pending:
+                value = pending[key]
+                frame.at[index, column] = float(value) if value is not None else float("nan")
+    return frame
+
+
+def queue_action(action):
+    """Only one navigation/save operation per Streamlit session at a time."""
+    state = st.session_state
+    if not state.get("poe_v5_action"):
+        state["poe_v5_action"] = action
 
 
 def annual_frame(data, year):
@@ -227,12 +254,17 @@ def render(url):
             st.error(f"No se puede leer POE: {type(exc).__name__}")
             return
     data = cache[year]
+    notice = state.pop("poe_v5_notice", None)
+    if notice:
+        st.warning(notice)
 
     if state["poe_v5_editing"]:
         st.markdown(f"**Edición abierta · {MONTHS[period.month-1]} {year}**")
         st.caption("Director de solo lectura; pega bloques Excel en Real (h) y Previsto (h).")
+        pending = state.get("poe_v5_retry_cells", {})
         edited = st.data_editor(
-            month_frame(data, period),
+            restore_pending_cells(data, period, pending)
+            if state.get("poe_v5_retry_period") == period else month_frame(data, period),
             hide_index=True, use_container_width=True, num_rows="fixed",
             disabled=["Director"],
             column_config={
@@ -245,19 +277,30 @@ def render(url):
             key=f"poe_v5_grid_{period:%Y%m}_{state['poe_v5_grid_serial']}",
         )
 
-        # Controls after editor ensure block pastes reach the returned DataFrame first.
+        # Queue one action and render controls disabled on the saving rerun.
+        # The grid is evaluated first so multi-cell Excel pastes are captured.
+        busy = bool(state.get("poe_v5_action"))
         left, save, close, right = st.columns([1, 2, 2, 1])
-        action = ("prev" if left.button("◀", help="Guardar y mes anterior") else
-                  "save" if save.button("Guardar mes") else
-                  "close" if close.button("Cerrar edición") else
-                  "next" if right.button("▶", help="Guardar y mes siguiente") else None)
+        left.button("◀", help="Guardar y mes anterior",
+                    disabled=busy, on_click=queue_action, args=("prev",))
+        save.button("Guardar mes", disabled=busy,
+                    on_click=queue_action, args=("save",))
+        close.button("Cerrar edición", disabled=busy,
+                     on_click=queue_action, args=("close",))
+        right.button("▶", help="Guardar y mes siguiente",
+                     disabled=busy, on_click=queue_action, args=("next",))
+
+        action = state.pop("poe_v5_action", None)
         if action:
+            state["poe_v5_busy"] = True
             try:
                 changes = month_changes(data, period, edited)
                 if changes:
                     with st.spinner("Guardando POE..."):
                         save_month(url, period, changes)
                     update_local(data, period, changes)
+                state.pop("poe_v5_retry_cells", None)
+                state.pop("poe_v5_retry_period", None)
                 if action in ("prev", "next"):
                     state["poe_v5_period"] = month_shift(period, -1 if action == "prev" else 1)
                 if action == "close":
@@ -266,9 +309,36 @@ def render(url):
                 if action == "save":
                     st.toast(f"Guardadas {len(changes)} filas del mes.")
                 st.rerun()
-            except (ValueError, psycopg.Error) as exc:
-                st.error(str(exc))
-                st.warning("La edición permanece abierta y las celdas no se han descartado.")
+            except ValueError as exc:
+                if str(exc).startswith("Conflicto en "):
+                    # Do not overwrite a newer DB value automatically. Refresh
+                    # baseline, preserve only changed cells, and require a new save.
+                    state["poe_v5_retry_cells"] = {
+                        (code, col): after[i]
+                        for code, before, after in changes
+                        for i, col in enumerate(("Real (h)", "Previsto (h)"))
+                        if before[i] != after[i]
+                    }
+                    state["poe_v5_retry_period"] = period
+                    try:
+                        cache[year] = unpack_year(load_year(url, year))
+                    except psycopg.Error as refresh_exc:
+                        st.error(f"No se pudo actualizar el año POE: {type(refresh_exc).__name__}")
+                    else:
+                        state["poe_v5_grid_serial"] += 1
+                        state["poe_v5_notice"] = (
+                            f"{exc} Se ha actualizado la referencia de Neon, "
+                            "conservando tus celdas editadas SIN guardarlas. "
+                            "Revisa el mes y pulsa Guardar de nuevo."
+                        )
+                        st.rerun()
+                else:
+                    st.error(str(exc))
+            except psycopg.Error as exc:
+                st.error(f"No se pudo guardar POE: {type(exc).__name__}")
+            finally:
+                state["poe_v5_busy"] = False
+            st.warning("La edición permanece abierta y los cambios no se han descartado.")
     else:
         a, b = st.columns([2, 2])
         # Reconcile only on external year transitions; never overwrite a user's year choice.

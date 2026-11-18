@@ -9,6 +9,7 @@ import pandas as pd
 from poe_board import (
     LIME, MONTHS, month_shift, parse_hours, unpack_year, month_frame, month_changes,
     update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
+    restore_pending_cells, queue_action,
 )
 
 
@@ -142,6 +143,69 @@ class POEV5Tests(unittest.TestCase):
                 save_month("unused", date(2026, 11, 1), [
                     ("110040", (None, None), (Decimal("100"), None))
                 ])
+
+    def test_replayed_save_is_idempotent_without_rewriting_neon(self):
+        class DB:
+            def __init__(self):
+                self.queries = []
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def transaction(self):
+                return self
+            def execute(self, sql, args=()):
+                self.queries.append(sql)
+                return self
+            def fetchall(self):
+                return [{"code": "110040", "real_hours": None,
+                         "planned_hours": Decimal("5775")}]
+        db = DB()
+        with patch("poe_board.connect", return_value=db):
+            self.assertEqual(save_month("unused", date(2029, 1, 1), [
+                ("110040", (None, None), (None, Decimal("5775")))
+            ]), 0)
+        self.assertEqual(len(db.queries), 2)  # lock + read; no duplicate write
+
+    def test_conflict_cannot_overwrite_newer_hours(self):
+        class DB:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def transaction(self):
+                return self
+            def execute(self, sql, args=()):
+                self.sql = sql
+                return self
+            def fetchall(self):
+                return [{"code": "180011", "real_hours": None,
+                         "planned_hours": Decimal("5775")}]
+        with patch("poe_board.connect", return_value=DB()):
+            with self.assertRaisesRegex(ValueError, "Conflicto"):
+                save_month("unused", date(2029, 1, 1), [
+                    ("180011", (None, None), (None, Decimal("6000")))
+                ])
+
+    def test_conflict_rebase_preserves_only_user_modified_cells(self):
+        period = date(2029, 1, 1)
+        fresh = {"directors": {"180011": "SUSTAINMENT LETONIA"},
+                 "hours": {("180011", period): (Decimal("42"), Decimal("5775"))}}
+        preserved = {("180011", "Previsto (h)"): Decimal("6000")}
+        frame = restore_pending_cells(fresh, period, preserved)
+        self.assertEqual(frame.loc[0, "Real (h)"], 42)
+        self.assertEqual(frame.loc[0, "Previsto (h)"], 6000)
+        self.assertEqual(month_changes(fresh, period, frame), [
+            ("180011", (Decimal("42"), Decimal("5775")),
+             (Decimal("42"), Decimal("6000")))
+        ])
+
+    def test_action_queue_rejects_second_navigation(self):
+        state = {}
+        with patch("poe_board.st.session_state", state):
+            queue_action("next")
+            queue_action("prev")
+        self.assertEqual(state["poe_v5_action"], "next")
 
     def test_order_guard_prevents_cross_director_paste(self):
         data = self.data()
