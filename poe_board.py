@@ -345,9 +345,10 @@ def render_annual_chart(url, data, year):
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
                              mode="lines+markers", connectgaps=False,
                              line=dict(color="#198754", width=3)))
-    upper = max(1, *(float(value) for value in
-                     ([reference["eac_hours"]] if reference and reference["eac_hours"] is not None else [])
-                     + [value for value in actual + forecast if value is not None])) * 1.05
+    values = ([float(reference["eac_hours"])]
+              if reference and reference["eac_hours"] is not None else [])
+    values += [float(value) for value in actual + forecast if value is not None]
+    upper = max([1.0, *values]) * 1.05
     fig.update_layout(height=390, margin=dict(l=15,r=15,t=15,b=10),
                       xaxis_title=None,yaxis_title=None,
                       xaxis=dict(fixedrange=True),
