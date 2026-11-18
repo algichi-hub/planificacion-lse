@@ -1,7 +1,7 @@
 name: POE validation
 on:
   push:
-    branches: [v0/sql-dashboard, feature/poe-board, feature/poe-v5, fix/poe-navigation-conflict, feature/poe-visibility-refresh, fix/poe-current-year-default]
+    branches: [v0/sql-dashboard, feature/poe-board, feature/poe-v5, fix/poe-navigation-conflict, feature/poe-visibility-refresh, fix/poe-current-year-default, feature/poe-annual-eac-chart]
   workflow_dispatch:
 jobs:
   tests:
