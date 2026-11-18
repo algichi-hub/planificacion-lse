@@ -230,7 +230,7 @@ class POEV5Tests(unittest.TestCase):
     def test_integer_display_does_not_mutate_decimal_storage(self):
         data = self.data()
         formatted = style_annual(data, 2026).to_html()
-        self.assertIn(">200<", formatted)
+        self.assertIn(">0</td>", formatted)  # Real has precedence over planned
         self.assertNotIn("200.00", formatted)
         self.assertEqual(data["hours"][("110040", date(2026, 11, 1))][1], Decimal("200"))
 
