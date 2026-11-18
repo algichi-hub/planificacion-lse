@@ -264,6 +264,12 @@ def render(url):
         state["poe_v5_editing"] = False
     if "poe_v5_grid_serial" not in state:
         state["poe_v5_grid_serial"] = 0
+    # Correct legacy sessions whose uninitialized year selector fell back to 2000.
+    if not state.get("poe_v5_current_year_fix"):
+        if state["poe_v5_period"].year == 2000 and not state["poe_v5_editing"]:
+            today = date.today()
+            state["poe_v5_period"] = date(today.year, today.month, 1)
+        state["poe_v5_current_year_fix"] = True
     period = state["poe_v5_period"]
     year = period.year
     cache = state["poe_v5_cache"]
@@ -372,10 +378,10 @@ def render(url):
         a, b = st.columns([2, 2])
         # Reconcile only on external year transitions; never overwrite a user's year choice.
         if state.get("poe_v5_year_anchor") != year:
-            state["poe_v5_read_year"] = year
+            state["poe_v5_read_year_v2"] = year
             state["poe_v5_year_anchor"] = year
         selected_year = a.number_input("Año", min_value=2000, max_value=2199,
-                                       step=1, key="poe_v5_read_year")
+                                       value=year, step=1, key="poe_v5_read_year_v2")
         if int(selected_year) != year:
             state["poe_v5_period"] = date(int(selected_year), 1, 1)
             st.rerun()
