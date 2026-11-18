@@ -69,7 +69,7 @@ def load_year(url, year):
     """Exactly one read; includes archived directors even when no hours exist."""
     with connect(url) as conn:
         return conn.execute("""
-            SELECT d.code, d.name, h.period, h.real_hours, h.planned_hours
+            SELECT d.code, d.name, d.visible, h.period, h.real_hours, h.planned_hours
             FROM poe_directors d LEFT JOIN poe_monthly_hours h
               ON h.code=d.code AND h.period >= %s AND h.period < %s
             ORDER BY d.code, h.period
@@ -78,19 +78,22 @@ def load_year(url, year):
 
 def unpack_year(rows):
     directors = {}
+    visible = {}
     hours = {}
     for row in rows:
         directors[row["code"]] = row["name"]
+        visible[row["code"]] = row.get("visible", True)
         if row["period"] is not None:
             hours[(row["code"], row["period"])] = (
                 row["real_hours"], row["planned_hours"]
             )
-    return {"directors": directors, "hours": hours}
+    return {"directors": directors, "visible": visible, "hours": hours}
 
 
 def month_frame(data, period):
     return pd.DataFrame([
-        {"Director": name, "Real (h)": float(data["hours"].get((code, period), (None, None))[0])
+        {"Visible": bool(data.get("visible", {}).get(code, True)),
+         "Director": name, "Real (h)": float(data["hours"].get((code, period), (None, None))[0])
          if data["hours"].get((code, period), (None, None))[0] is not None else float("nan"),
          "Previsto (h)": float(data["hours"].get((code, period), (None, None))[1])
          if data["hours"].get((code, period), (None, None))[1] is not None else float("nan")}
@@ -114,9 +117,16 @@ def month_changes(data, period, edited):
     return result
 
 
-def save_month(url, period, changes):
-    """Per-month atomic optimistic save, no writes to any non-POE table."""
-    if not changes:
+def visibility_changes(data, edited):
+    """Detect edited checkboxes independently from the monthly hour values."""
+    return [(code, bool(data.get("visible", {}).get(code, True)), bool(value))
+            for code, value in zip(data["directors"], edited["Visible"])
+            if bool(data.get("visible", {}).get(code, True)) != bool(value)]
+
+
+def save_month(url, period, changes, visibility=()):
+    """Atomic optimistic save of hours and visibility; POE tables only."""
+    if not changes and not visibility:
         return 0
     codes = [code for code, _, _ in changes]
     with connect(url) as conn:
@@ -142,6 +152,14 @@ def save_month(url, period, changes):
                     )
                 pending.append((code, original, desired))
             changes = pending
+            if visibility:
+                current_visible = {r["code"]: r["visible"] for r in conn.execute(
+                    "SELECT code,visible FROM poe_directors WHERE code=ANY(%s) FOR UPDATE",
+                    ([code for code, _, _ in visibility],)
+                ).fetchall()}
+                for code, old, new in visibility:
+                    if current_visible.get(code) not in (old, new):
+                        raise ValueError(f"Conflicto de visibilidad en {code}: recarga POE.")
             insert = [
                 {"code": code, "real": str(new[0]) if new[0] is not None else None,
                  "planned": str(new[1]) if new[1] is not None else None}
@@ -164,10 +182,20 @@ def save_month(url, period, changes):
                     "DELETE FROM poe_monthly_hours WHERE period=%s AND code=ANY(%s)",
                     (period, removed)
                 )
-    return len(changes)
+            pending_visible = [{"code": code, "visible": new} for code, old, new in visibility
+                               if current_visible.get(code) == old]
+            if pending_visible:
+                conn.execute("""
+                    UPDATE poe_directors AS d SET visible=x.visible
+                    FROM jsonb_to_recordset(%s::jsonb) AS x(code text, visible boolean)
+                    WHERE d.code=x.code
+                """, (json.dumps(pending_visible),))
+    return len(changes) + len(pending_visible) if visibility else len(changes)
 
 
-def update_local(data, period, changes):
+def update_local(data, period, changes, visibility=()):
+    for code, _, new in visibility:
+        data.setdefault("visible", {})[code] = new
     for code, _, after in changes:
         if after == (None, None):
             data["hours"].pop((code, period), None)
@@ -178,13 +206,14 @@ def update_local(data, period, changes):
 def restore_pending_cells(data, period, pending):
     """Overlay only user-edited cells onto freshly fetched Neon values."""
     frame = month_frame(data, period)
-    columns = ("Real (h)", "Previsto (h)")
+    columns = ("Real (h)", "Previsto (h)", "Visible")
     for index, code in enumerate(data["directors"]):
         for column in columns:
             key = (code, column)
             if key in pending:
                 value = pending[key]
-                frame.at[index, column] = float(value) if value is not None else float("nan")
+                frame.at[index, column] = (bool(value) if column == "Visible" else
+                                           float(value) if value is not None else float("nan"))
     return frame
 
 
@@ -200,6 +229,8 @@ def annual_frame(data, year):
     values = []
     masks = []
     for code, name in data["directors"].items():
+        if not data.get("visible", {}).get(code, True):
+            continue
         row = {"Director": name}
         mask = {"Director": ""}
         for month, title in enumerate(MONTHS, 1):
@@ -216,7 +247,7 @@ def annual_frame(data, year):
 def style_annual(data, year):
     frame, mask = annual_frame(data, year)
     return frame.style.apply(lambda _: mask, axis=None).format(
-        {month: "{:.2f}" for month in MONTHS}, na_rep=""
+        {month: "{:.0f}" for month in MONTHS}, na_rep=""
     )
 
 
@@ -224,17 +255,6 @@ def render(url):
     st.subheader("POE mensual")
     st.caption("Horas reales y previstas manuales; lectura de directores EAC, sin modificar OF, bonos ni EAC.")
     state = st.session_state
-    if not state.get("poe_v5_synced", False):
-        try:
-            sync_directors(url)
-            state["poe_v5_synced"] = True
-        except psycopg.errors.UndefinedTable:
-            st.error("Faltan las tablas POE V5. Aplicar sql/poe_v5.sql.")
-            return
-        except psycopg.Error as exc:
-            st.error(f"Error de sincronización POE: {type(exc).__name__}")
-            return
-
     if "poe_v5_cache" not in state:
         state["poe_v5_cache"] = {}
     if "poe_v5_period" not in state:
@@ -260,7 +280,7 @@ def render(url):
 
     if state["poe_v5_editing"]:
         st.markdown(f"**Edición abierta · {MONTHS[period.month-1]} {year}**")
-        st.caption("Director de solo lectura; pega bloques Excel en Real (h) y Previsto (h).")
+        st.caption("Marca Visible para mostrar el director en lectura. Pega bloques Excel en las columnas de horas.")
         pending = state.get("poe_v5_retry_cells", {})
         edited = st.data_editor(
             restore_pending_cells(data, period, pending)
@@ -268,11 +288,12 @@ def render(url):
             hide_index=True, use_container_width=True, num_rows="fixed",
             disabled=["Director"],
             column_config={
+                "Visible": st.column_config.CheckboxColumn("Visible", width="small"),
                 "Director": st.column_config.TextColumn("Director", width="large"),
                 "Real (h)": st.column_config.NumberColumn(
-                    "Real (h)", min_value=0, step=0.01, format="%.2f"),
+                    "Real (h)", min_value=0, step=1, format="%.0f"),
                 "Previsto (h)": st.column_config.NumberColumn(
-                    "Previsto (h)", min_value=0, step=0.01, format="%.2f"),
+                    "Previsto (h)", min_value=0, step=1, format="%.0f"),
             },
             key=f"poe_v5_grid_{period:%Y%m}_{state['poe_v5_grid_serial']}",
         )
@@ -295,10 +316,11 @@ def render(url):
             state["poe_v5_busy"] = True
             try:
                 changes = month_changes(data, period, edited)
-                if changes:
+                v_changes = visibility_changes(data, edited)
+                if changes or v_changes:
                     with st.spinner("Guardando POE..."):
-                        save_month(url, period, changes)
-                    update_local(data, period, changes)
+                        save_month(url, period, changes, v_changes)
+                    update_local(data, period, changes, v_changes)
                 state.pop("poe_v5_retry_cells", None)
                 state.pop("poe_v5_retry_period", None)
                 if action in ("prev", "next"):
@@ -307,10 +329,10 @@ def render(url):
                     state["poe_v5_editing"] = False
                 state["poe_v5_grid_serial"] += 1
                 if action == "save":
-                    st.toast(f"Guardadas {len(changes)} filas del mes.")
+                    st.toast(f"Guardados {len(changes)} cambios de horas y {len(v_changes)} de visibilidad.")
                 st.rerun()
             except ValueError as exc:
-                if str(exc).startswith("Conflicto en "):
+                if str(exc).startswith("Conflicto en ") or str(exc).startswith("Conflicto de visibilidad"):
                     # Do not overwrite a newer DB value automatically. Refresh
                     # baseline, preserve only changed cells, and require a new save.
                     state["poe_v5_retry_cells"] = {
@@ -319,6 +341,9 @@ def render(url):
                         for i, col in enumerate(("Real (h)", "Previsto (h)"))
                         if before[i] != after[i]
                     }
+                    state["poe_v5_retry_cells"].update(
+                        {(code, "Visible"): new for code, _, new in v_changes}
+                    )
                     state["poe_v5_retry_period"] = period
                     try:
                         cache[year] = unpack_year(load_year(url, year))
@@ -356,10 +381,15 @@ def render(url):
         st.caption("Verde lima = real registrado (incluye cero). Sin fondo = previsto o vacío.")
         st.dataframe(style_annual(data, year), hide_index=True,
                      use_container_width=True)
-        if st.button("Actualizar directores y datos POE"):
+        refresh, sync = st.columns(2)
+        if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
+            state["poe_v5_cache"] = {}
+            st.rerun()
+        if sync.button("Sincronizar directores", help="Incorporar directores nuevos desde ERP sin modificar los existentes."):
             try:
-                sync_directors(url)
+                added = sync_directors(url)
                 state["poe_v5_cache"] = {}
+                st.toast(f"{len(added)} directores nuevos incorporados.")
                 st.rerun()
             except psycopg.Error as exc:
                 st.error(str(exc))
