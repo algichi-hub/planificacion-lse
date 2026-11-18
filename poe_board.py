@@ -372,10 +372,10 @@ def render(url):
         a, b = st.columns([2, 2])
         # Reconcile only on external year transitions; never overwrite a user's year choice.
         if state.get("poe_v5_year_anchor") != year:
-            state["poe_v5_read_year"] = year
+            state["poe_v5_read_year_v2"] = year
             state["poe_v5_year_anchor"] = year
         selected_year = a.number_input("Año", min_value=2000, max_value=2199,
-                                       step=1, key="poe_v5_read_year")
+                                       value=year, step=1, key="poe_v5_read_year_v2")
         if int(selected_year) != year:
             state["poe_v5_period"] = date(int(selected_year), 1, 1)
             st.rerun()
