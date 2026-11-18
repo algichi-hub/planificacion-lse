@@ -12,7 +12,7 @@ from poe_board import (
     LIME, MONTHS, month_shift, parse_hours, unpack_year, month_frame, month_changes,
     update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
     restore_pending_cells, queue_action, visibility_changes, render,
-    annual_evolution, director_eac,
+    annual_evolution, director_eac, render_annual_chart,
 )
 
 
@@ -50,6 +50,42 @@ class POEV5Tests(unittest.TestCase):
         frame, _ = annual_frame(self.data(), date.today().year)
         self.assertEqual(frame.columns.tolist(), ["Director", *MONTHS])
         self.assertEqual(len(MONTHS), 12)
+
+    def test_2025_dragon_real_series_from_neon_and_no_forecast(self):
+        data = {"directors": {"110040": "DRAGON"}, "visible": {"110040": True},
+                "opening": {"110040": None}, "opening_count": {"110040": 0},
+                "hours": {}}
+        monthly = [0, 977, 1319, 1009, 1120, 1458, 1337, 906, 1529, 1513, 1511, 1461]
+        for month, hours in enumerate(monthly, 1):
+            data["hours"][("110040", date(2025, month, 1))] = (Decimal(hours), None)
+        actual, forecast, last_real, gaps = annual_evolution(data, "110040", 2025)
+        self.assertEqual(actual, [0, 977, 2296, 3305, 4425, 5883,
+                                  7220, 8126, 9655, 11168, 12679, 14140])
+        self.assertEqual(forecast, [None] * 12)
+        self.assertEqual(last_real, 12)
+        self.assertEqual(gaps, [])
+
+    def test_chart_reuses_selected_read_year_and_existing_data(self):
+        tree = ast.parse(inspect.getsource(render))
+        chart_calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                       and isinstance(n.func, ast.Name)
+                       and n.func.id == "render_annual_chart"]
+        self.assertEqual(len(chart_calls), 1)
+        self.assertEqual([a.id for a in chart_calls[0].args],
+                         ["url", "data", "year"])
+        # No additional year is loaded just to draw the plot.
+        self.assertNotIn("chart_year", inspect.getsource(render))
+
+    def test_chart_omits_vertical_axis_title(self):
+        tree = ast.parse(inspect.getsource(render_annual_chart))
+        layouts = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                   and isinstance(n.func, ast.Attribute)
+                   and n.func.attr == "update_layout"]
+        self.assertEqual(len(layouts), 1)
+        titles = [k.value for k in layouts[0].keywords if k.arg == "yaxis_title"]
+        self.assertEqual(len(titles), 1)
+        self.assertIsInstance(titles[0], ast.Constant)
+        self.assertIsNone(titles[0].value)
 
     def test_2026_dragon_actual_and_forecast_from_neon_sample(self):
         from decimal import Decimal
