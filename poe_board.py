@@ -281,37 +281,26 @@ def director_eac(url, code):
 
 
 def annual_evolution(data, code, year):
-    """Cumulative manually incurred hours, then continuation of monthly forecasts."""
+    """Plot real and planned cumulatives for every month with each source value."""
     opening = data.get("opening", {}).get(code)
-    running = Decimal(opening) if opening is not None else Decimal(0)
-    actual, forecast = [], []
-    forecast_started = False
-    gaps = []
+    real_total = planned_total = Decimal(opening) if opening is not None else Decimal(0)
+    actual, forecast, gaps = [], [], []
     last_actual = None
     for month in range(1, 13):
-        period = date(year, month, 1)
-        real, planned = data["hours"].get((code, period), (None, None))
-        if real is not None and not forecast_started:
-            running += real
+        real, planned = data["hours"].get((code, date(year, month, 1)), (None, None))
+        if real is not None:
+            real_total += real
             last_actual = month
-            actual.append(float(running))
-            forecast.append(None)
-        elif planned is not None:
-            if not forecast_started and last_actual is not None:
-                # Join the grey forecast line to the last actual point in the plot.
-                forecast_started = True
-            else:
-                forecast_started = True
-            running += planned
-            actual.append(None)
-            forecast.append(float(running))
-        else:
-            actual.append(None)
-            forecast.append(None)
+        # For the projected total, monthly planned replaces actual when provided;
+        # otherwise reuse actual to preserve continuity with historical months.
+        if planned is not None:
+            planned_total += planned
+        elif real is not None:
+            planned_total += real
+        actual.append(float(real_total) if real is not None else None)
+        forecast.append(float(planned_total) if planned is not None else None)
+        if real is None and planned is None:
             gaps.append(month)
-            if forecast_started:
-                # No implied zero consumption for missing future months.
-                break
     return actual, forecast, last_actual, gaps
 
 
@@ -330,10 +319,11 @@ def render_annual_chart(url, data, year):
         reference = None
 
     actual, forecast, last_actual, gaps = annual_evolution(data, code, year)
-    if last_actual is not None:
-        # Preserve continuity at the real -> forecast boundary.
-        if any(value is not None for value in forecast):
-            forecast[last_actual - 1] = actual[last_actual - 1]
+    if (last_actual is not None and last_actual < 12
+            and forecast[last_actual - 1] is None
+            and forecast[last_actual] is not None):
+        # Bridge a forecast beginning immediately after the final real month.
+        forecast[last_actual - 1] = actual[last_actual - 1]
     fig = go.Figure()
     if reference and reference["eac_hours"] is not None:
         fig.add_trace(go.Scatter(x=MONTHS, y=[float(reference["eac_hours"])] * 12,
