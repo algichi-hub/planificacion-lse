@@ -52,6 +52,22 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(frame.columns.tolist(), ["Director", *MONTHS])
         self.assertEqual(len(MONTHS), 12)
 
+    def test_refresh_and_sync_buttons_immediately_follow_poe_table(self):
+        source = inspect.getsource(render)
+        table = source.index("st.dataframe(style_annual(data, year)")
+        refresh = source.index('refresh, sync = st.columns(2)', table)
+        refresh_button = source.index('refresh.button("Actualizar POE"', refresh)
+        sync_button = source.index('sync.button("Sincronizar directores"', refresh)
+        selector = source.index('st.selectbox("Snapshot EAC para la gráfica"', table)
+        chart = source.index("render_director_bars(data, sources)", table)
+        self.assertLess(table, refresh)
+        self.assertLess(refresh, refresh_button)
+        self.assertLess(refresh_button, sync_button)
+        self.assertLess(sync_button, selector)
+        self.assertLess(selector, chart)
+        self.assertEqual(source.count('refresh.button("Actualizar POE"'), 1)
+        self.assertEqual(source.count('sync.button("Sincronizar directores"'), 1)
+
     def test_eac_selector_is_immediately_below_annual_table(self):
         source = inspect.getsource(render)
         table = source.index("st.dataframe(style_annual(data, year)")
