@@ -115,45 +115,72 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(trace.mode, "lines+markers")
         self.assertFalse(any(t.mode == "text" for t in chart.call_args.args[0].data))
 
-    def test_bar_poe_matches_visible_annual_table_and_changes_with_year(self):
+    def test_bar_poe_lifetime_totals_independent_of_selected_year(self):
         data = {"directors": {"A": "FIRST", "B": "HIDDEN", "C": "THIRD"},
                 "visible": {"A": True, "B": False, "C": True},
-                "hours": {
-                    ("A", date(2026, 1, 1)): (Decimal(100), Decimal(200)),
-                    ("A", date(2026, 2, 1)): (None, Decimal(50)),
-                    ("A", date(2026, 3, 1)): (Decimal(0), Decimal(90)),
-                    ("A", date(2025, 1, 1)): (Decimal(70), None),
-                    ("B", date(2026, 1, 1)): (Decimal(400), None),
-                }}
+                "hours": {}}
         sources = [{"code": "A", "eac_hours": Decimal(1000),
-                    "incurred_hours": Decimal(350), "projects": 2},
+                    "incurred_hours": Decimal(350), "projects": 2,
+                    "poe_real": Decimal(270), "poe_future": Decimal(140)},
                    {"code": "C", "eac_hours": None, "incurred_hours": None,
-                    "projects": None}]
-        frame = director_bar_frame(data, 2026, sources)
+                    "poe_real": None, "poe_future": None}]
+        frame = director_bar_frame(data, sources)
         self.assertEqual(frame.management_group.tolist(), ["A FIRST", "C THIRD"])
-        self.assertEqual(frame.loc[0, "poe_hours"], Decimal(150))
+        self.assertEqual(frame.loc[0, "poe_real"], Decimal(270))
+        self.assertEqual(frame.loc[0, "poe_future"], Decimal(140))
         self.assertEqual(frame.loc[0, "etc_hours"], Decimal(1000))
         self.assertEqual(frame.loc[0, "hours_incurred"], Decimal(350))
-        self.assertIsNone(frame.loc[1, "poe_hours"])
-        self.assertEqual(director_bar_frame(data, 2025, sources).loc[0, "poe_hours"],
-                         Decimal(70))
-        self.assertIsNone(director_bar_frame(data, 2025, sources).loc[1, "poe_hours"])
+        self.assertIsNone(frame.loc[1, "poe_real"])
+        self.assertIsNone(frame.loc[1, "poe_future"])
+        self.assertNotIn("year", inspect.signature(director_bar_frame).parameters)
 
-    def test_bar_uses_shared_eac_chart_and_lime_poe(self):
+    def test_bar_uses_shared_eac_chart_lime_and_light_gray_stack(self):
         data = {"directors": {"A": "FIRST"}, "visible": {"A": True},
-                "hours": {("A", date(2026, 1, 1)): (Decimal(10), None)}}
+                "hours": {}}
         with patch("poe_board.eac_chart") as chart, \
              patch("poe_board.st.subheader"), patch("poe_board.st.caption"):
-            render_director_bars(data, 2026, [
+            render_director_bars(data, [
                 {"code": "A", "eac_hours": Decimal(500),
-                 "incurred_hours": Decimal(200)}
+                 "incurred_hours": Decimal(200), "poe_real": Decimal(100),
+                 "poe_future": Decimal(150), "erp_date": date(2026, 10, 15)}
             ])
         chart.assert_called_once()
         args, kwargs = chart.call_args
         self.assertEqual(args[1], "management_group")
         self.assertEqual(list(kwargs["metrics"].values()),
-                         ["EAC", "POE", "Incurrido OF"])
-        self.assertEqual(kwargs["palette"]["POE"], LIME)
+                         ["EAC", "POE real", "POE previsto", "Incurrido OF"])
+        self.assertEqual(kwargs["palette"]["POE real"], LIME)
+        self.assertEqual(kwargs["palette"]["POE previsto"], "#D9DEE3")
+        self.assertEqual(kwargs["stack_groups"]["POE real"], "POE")
+        self.assertEqual(kwargs["stack_groups"]["POE previsto"], "POE")
+        self.assertNotEqual(kwargs["stack_groups"]["EAC"], "POE")
+        self.assertNotEqual(kwargs["stack_groups"]["Incurrido OF"], "POE")
+
+    def test_existing_eac_chart_remains_grouped_and_poe_segments_stack(self):
+        from eac_board import chart as shared_chart
+        frame = pd.DataFrame([{
+            "management_group": "110040 DRAGON", "etc_hours": 500,
+            "poe_real": 100, "poe_future": 150, "hours_incurred": 200
+        }])
+        with patch("eac_board.st.plotly_chart") as plot:
+            shared_chart(frame, "management_group", metrics={
+                "etc_hours": "EAC", "poe_real": "POE real",
+                "poe_future": "POE previsto", "hours_incurred": "Incurrido OF",
+            }, stack_groups={"EAC": "EAC", "POE real": "POE",
+                             "POE previsto": "POE", "Incurrido OF": "OF"})
+        fig = plot.call_args.args[0]
+        traces = {trace.name: trace for trace in fig.data}
+        self.assertEqual(fig.layout.barmode, "relative")
+        self.assertEqual(traces["POE real"].offsetgroup, traces["POE previsto"].offsetgroup)
+        self.assertNotEqual(traces["POE real"].offsetgroup, traces["EAC"].offsetgroup)
+        self.assertEqual(sum([traces["POE real"].y[0], traces["POE previsto"].y[0]]), 250)
+        original = pd.DataFrame([{
+            "management_group": "110040 DRAGON", "etc_hours": 500,
+            "hours_granted": 300, "hours_incurred": 200
+        }])
+        with patch("eac_board.st.plotly_chart") as plot:
+            shared_chart(original, "management_group")
+        self.assertEqual(plot.call_args.args[0].layout.barmode, "group")
 
     def test_bar_snapshot_query_one_read_latest_ct422_and_cached(self):
         class DB:
@@ -181,6 +208,9 @@ class POEV5Tests(unittest.TestCase):
         self.assertIn("MAX(snapshot_date)", sql)
         self.assertIn("work_center='422'", sql)
         self.assertIn("eac_project_hours", sql)
+        self.assertIn("poe_monthly_hours", sql)
+        self.assertIn("MAX(period) AS last_real", sql)
+        self.assertIn("h.period > l.last_real", sql)
         self.assertNotIn("UPDATE ", sql)
         self.assertNotIn("INSERT ", sql)
         self.assertNotIn("DELETE ", sql)
