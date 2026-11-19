@@ -312,56 +312,71 @@ def director_bar_sources(url, snapshot_id, codes):
                 WHERE f.work_center='422'
                 GROUP BY m.code
             )
+            , poe_last_real AS (
+                SELECT code, MAX(period) AS last_real
+                FROM poe_monthly_hours WHERE real_hours IS NOT NULL
+                GROUP BY code
+            ), poe_totals AS (
+                SELECT h.code,
+                       SUM(h.real_hours) AS real_total,
+                       SUM(h.planned_hours) FILTER (
+                           WHERE l.last_real IS NULL OR h.period > l.last_real
+                       ) AS future_total
+                FROM poe_monthly_hours h
+                LEFT JOIN poe_last_real l ON l.code=h.code
+                GROUP BY h.code
+            )
             SELECT d.code, e.eac_hours, e.projects, i.incurred_hours,
+                   poe.real_total AS poe_real, poe.future_total AS poe_future,
                    (SELECT snapshot_date FROM latest) AS erp_date
             FROM unnest(%s::text[]) AS d(code)
             LEFT JOIN eac e ON e.code=d.code
             LEFT JOIN incurred i ON i.code=d.code
+            LEFT JOIN poe_totals poe ON poe.code=d.code
         """, (snapshot_id, list(codes))).fetchall()
 
 
-def director_bar_frame(data, year, sources):
-    """Annual POE total sums exactly the real-priority cells shown in the table."""
+def director_bar_frame(data, sources):
+    """Complete POE horizon: all real hours plus forecasts after last real month."""
     by_code = {r["code"]: r for r in sources}
     rows = []
     for code, name in data["directors"].items():
         if not data.get("visible", {}).get(code, True):
             continue
-        values = [data["hours"].get((code, date(year, month, 1)), (None, None))
-                  for month in range(1, 13)]
-        selected = [real if real is not None else planned for real, planned in values
-                    if real is not None or planned is not None]
         source = by_code.get(code, {})
         rows.append({
             "management_group": f"{code} {name}",
             "etc_hours": source.get("eac_hours"),
-            "poe_hours": sum(selected, Decimal(0)) if selected else None,
+            "poe_real": source.get("poe_real"),
+            "poe_future": source.get("poe_future"),
             "hours_incurred": source.get("incurred_hours"),
         })
     return pd.DataFrame(rows, columns=[
-        "management_group", "etc_hours", "poe_hours", "hours_incurred"
+        "management_group", "etc_hours", "poe_real", "poe_future", "hours_incurred"
     ])
 
 
-def render_director_bars(data, year, sources):
-    """Reuse the grouped director bars of the EAC dashboard."""
-    frame = director_bar_frame(data, year, sources)
+def render_director_bars(data, sources):
+    """Reuse the EAC chart; stack only the real and future POE segments."""
+    frame = director_bar_frame(data, sources)
     if frame.empty:
         st.info("No hay directores visibles para comparar.")
         return
     st.subheader("EAC vs POE vs Incurrido OF por director")
     erp_date = sources[0].get("erp_date") if sources else None
-    st.caption(f"POE: suma de enero a diciembre de {year} (real prioritario). "
-               f"Incurrido OF: CT 422 · {erp_date:%d/%m/%Y}."
-               if erp_date else
-               f"POE: suma de enero a diciembre de {year} (real prioritario). "
-               "Sin snapshot OF del CT 422.")
+    st.caption("POE: real histórico completo (verde lima) + previsto posterior "
+               "al último mes real (gris claro), sin límite de año. "
+               + (f"Incurrido OF: CT 422 · {erp_date:%d/%m/%Y}."
+                  if erp_date else "Sin snapshot OF del CT 422."))
     eac_chart(frame, "management_group", metrics={
-        "etc_hours": "EAC", "poe_hours": "POE",
-        "hours_incurred": "Incurrido OF",
+        "etc_hours": "EAC", "poe_real": "POE real",
+        "poe_future": "POE previsto", "hours_incurred": "Incurrido OF",
     }, palette={
-        "EAC": "#D5A547", "POE": LIME, "Incurrido OF": "#1F4E8C",
-    })
+        "EAC": "#D5A547", "POE real": LIME,
+        "POE previsto": "#D9DEE3", "Incurrido OF": "#1F4E8C",
+    }, stack_groups={"POE real": "POE", "POE previsto": "POE",
+                     "EAC": "EAC", "Incurrido OF": "OF"})
+
 
 
 def annual_evolution(data, code, year):
@@ -627,7 +642,7 @@ def render(url):
                     st.warning(f"No se pudo leer la comparativa EAC/OF: {type(exc).__name__}")
                     sources = []
                 if sources:
-                    render_director_bars(data, year, sources)
+                    render_director_bars(data, sources)
                     first = next(r for r in sources if r["code"] == codes[0])
                     metadata = snapshots.loc[snapshots["id"] == selected_eac].iloc[0]
                     reference = {
