@@ -343,11 +343,16 @@ def render_annual_chart(url, data, year, snapshot_id):
                     for value in actual]
                    if eac_total is not None and eac_total > 0 else [None] * 12)
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
-                             mode="lines+markers+text" if eac_total and eac_total > 0 else "lines+markers",
-                             text=percentages, textposition="top center",
-                             textfont=dict(size=10, color="#198754"),
-                             cliponaxis=False, connectgaps=False,
+                             mode="lines+markers", connectgaps=False,
                              line=dict(color="#198754", width=3)))
+    # Render labels in the final trace so no curve or marker covers them.
+    if eac_total is not None and eac_total > 0:
+        fig.add_trace(go.Scatter(
+            x=MONTHS, y=actual, name="Porcentaje incurrido",
+            mode="text", text=[f"<b>{p}</b>" if p is not None else None
+                               for p in percentages],
+            textposition="top center", textfont=dict(size=15, color="#198754"),
+            cliponaxis=False, showlegend=False, hoverinfo="skip"))
     values = ([float(reference["eac_hours"])]
               if reference and reference["eac_hours"] is not None else [])
     values += [float(value) for value in actual + forecast if value is not None]
