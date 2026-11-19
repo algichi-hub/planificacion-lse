@@ -355,7 +355,7 @@ def comparison_table(frame, labels, filename, key):
     )
 
 
-def chart(frame, category, metrics=None, palette=None):
+def chart(frame, category, metrics=None, palette=None, stack_groups=None):
     """Reusable bars: original EAC view or POE's chosen three-series comparison."""
     metrics = metrics or {
         "etc_hours": "EAC",
@@ -396,6 +396,11 @@ def chart(frame, category, metrics=None, palette=None):
             "horas": "Horas", "serie": "",
         },
     )
+    if stack_groups:
+        # Identical offset groups are stacked; distinct ones remain side by side.
+        fig.update_layout(barmode="relative")
+        for trace in fig.data:
+            trace.offsetgroup = stack_groups.get(trace.name, trace.name)
     fig.update_layout(
         autosize=True,
         height=max(300, 46 * len(ordered_codes) + 115) if horizontal else 465,
