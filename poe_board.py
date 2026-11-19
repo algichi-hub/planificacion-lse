@@ -443,7 +443,7 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
     st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}",
                     config={"displayModeBar": False, "scrollZoom": False,
                             "doubleClick": False})
-    if reference:
+    if reference and reference["eac_hours"] is not None:
         st.caption(f"EAC {reference['year']} Q{reference['quarter']} · "
                    f"{reference['eac_hours']:,.0f} h · {reference['projects']} proyectos.")
     else:
