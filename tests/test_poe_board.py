@@ -12,7 +12,7 @@ from poe_board import (
     LIME, MONTHS, month_shift, parse_hours, unpack_year, month_frame, month_changes,
     update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
     restore_pending_cells, queue_action, visibility_changes, render,
-    annual_evolution, director_eac, render_annual_chart,
+    annual_evolution, director_eac, render_annual_chart, available_eac_snapshots,
 )
 
 
@@ -51,6 +51,63 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(frame.columns.tolist(), ["Director", *MONTHS])
         self.assertEqual(len(MONTHS), 12)
 
+    def test_eac_selector_is_immediately_below_annual_table(self):
+        source = inspect.getsource(render)
+        table = source.index("st.dataframe(style_annual(data, year)")
+        selector = source.index('st.selectbox("Snapshot EAC para la gráfica"')
+        chart = source.index("render_annual_chart(url, data, year, selected_eac)")
+        self.assertLess(table, selector)
+        self.assertLess(selector, chart)
+        self.assertIn("index=0, format_func=lambda v: choices[v]", source)
+
+    def test_snapshots_catalog_reuses_eac_board_listing(self):
+        frame = pd.DataFrame([
+            {"id": 3, "year": 2027, "quarter": 1, "status": "draft"},
+            {"id": 1, "year": 2026, "quarter": 3, "status": "published"},
+        ])
+        available_eac_snapshots.clear()
+        with patch("poe_board.list_snapshots", return_value=frame) as listing:
+            self.assertEqual(available_eac_snapshots("unused").iloc[0]["id"], 3)
+            self.assertEqual(available_eac_snapshots("unused").iloc[0]["id"], 3)
+        listing.assert_called_once_with("unused")
+
+    def test_real_percentage_labels_use_selected_eac(self):
+        data = {"directors": {"A": "DIRECTOR"}, "visible": {"A": True},
+                "opening": {"A": Decimal(200)}, "opening_count": {"A": 1},
+                "hours": {("A", date(2026, 1, 1)): (Decimal(50), None),
+                          ("A", date(2026, 2, 1)): (Decimal(50), Decimal(60))}}
+        ref = {"year": 2026, "quarter": 4, "eac_hours": Decimal(1000),
+               "projects": 1}
+        with patch("poe_board.director_eac", return_value=ref) as get_eac, \
+             patch("poe_board.st.plotly_chart") as chart, \
+             patch("poe_board.st.subheader"), \
+             patch("poe_board.st.caption"):
+            render_annual_chart("unused", data, 2026, 9)
+        get_eac.assert_called_once_with("unused", "A", 9)
+        figure = chart.call_args.args[0]
+        real = next(trace for trace in figure.data if trace.name == "Incurrido real acumulado")
+        limit = next(trace for trace in figure.data if trace.name == "Límite EAC")
+        self.assertEqual(real.text[0:2], ("25.0%", "30.0%"))
+        self.assertIsNone(real.text[2])
+        self.assertEqual(real.mode, "lines+markers+text")
+        self.assertEqual(limit.y[0], 1000)
+
+    def test_no_percentage_when_selected_eac_zero(self):
+        data = {"directors": {"A": "DIRECTOR"}, "visible": {"A": True},
+                "opening": {}, "opening_count": {},
+                "hours": {("A", date(2026, 1, 1)): (Decimal(50), None)}}
+        ref = {"year": 2026, "quarter": 3, "eac_hours": Decimal(0),
+               "projects": 1}
+        with patch("poe_board.director_eac", return_value=ref), \
+             patch("poe_board.st.plotly_chart") as chart, \
+             patch("poe_board.st.subheader"), \
+             patch("poe_board.st.caption"):
+            render_annual_chart("unused", data, 2026, 1)
+        trace = next(trace for trace in chart.call_args.args[0].data
+                     if trace.name == "Incurrido real acumulado")
+        self.assertEqual(trace.mode, "lines+markers")
+        self.assertTrue(all(x is None for x in trace.text))
+
     def test_2025_dragon_real_series_from_neon_and_no_forecast(self):
         data = {"directors": {"110040": "DRAGON"}, "visible": {"110040": True},
                 "opening": {"110040": None}, "opening_count": {"110040": 0},
@@ -72,7 +129,7 @@ class POEV5Tests(unittest.TestCase):
                        and n.func.id == "render_annual_chart"]
         self.assertEqual(len(chart_calls), 1)
         self.assertEqual([a.id for a in chart_calls[0].args],
-                         ["url", "data", "year"])
+                         ["url", "data", "year", "selected_eac"])
         # No additional year is loaded just to draw the plot.
         self.assertNotIn("chart_year", inspect.getsource(render))
 
@@ -87,7 +144,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.plotly_chart") as chart, \
              patch("poe_board.st.subheader"), \
              patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2025)
+            render_annual_chart("unused", data, 2025, 1)
         figure = chart.call_args.args[0]
         self.assertEqual(figure.layout.yaxis.range[0], 0)
         self.assertGreater(figure.layout.yaxis.range[1], 48526)
@@ -108,7 +165,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.subheader"), \
              patch("poe_board.st.warning"), \
              patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2025)
+            render_annual_chart("unused", data, 2025, 1)
         figure = chart.call_args.args[0]
         self.assertEqual(figure.layout.yaxis.range[0], 0)
         self.assertGreater(figure.layout.yaxis.range[1], 0)
@@ -174,7 +231,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.subheader"), \
              patch("poe_board.st.warning"), \
              patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2026)
+            render_annual_chart("unused", data, 2026, 1)
         figure = chart.call_args.args[0]
         planned_trace = next(t for t in figure.data if t.name == "Previsto acumulado")
         real_trace = next(t for t in figure.data if t.name == "Incurrido real acumulado")
@@ -218,11 +275,12 @@ class POEV5Tests(unittest.TestCase):
         db = DB()
         with patch("poe_board.connect", return_value=db):
             director_eac.clear()
-            value = director_eac("unused", "110040")
+            value = director_eac("unused", "110040", 1)
             self.assertEqual(value["eac_hours"], Decimal(48526))
         self.assertEqual(len(db.calls), 1)
         self.assertIn("eac_snapshots", db.calls[0][0])
         self.assertIn("eac_project_hours", db.calls[0][0])
+        self.assertEqual(db.calls[0][1], (1, "110040"))
         self.assertFalse(any("UPDATE " in sql or "INSERT " in sql or "DELETE " in sql
                              for sql, _ in db.calls))
 
