@@ -13,6 +13,7 @@ from poe_board import (
     update_local, annual_frame, style_annual, save_month, sync_directors, load_year,
     restore_pending_cells, queue_action, visibility_changes, render,
     annual_evolution, director_eac, render_annual_chart, available_eac_snapshots,
+    director_bar_sources, director_bar_frame, render_director_bars,
 )
 
 
@@ -55,7 +56,7 @@ class POEV5Tests(unittest.TestCase):
         source = inspect.getsource(render)
         table = source.index("st.dataframe(style_annual(data, year)")
         selector = source.index('st.selectbox("Snapshot EAC para la gráfica"')
-        chart = source.index("render_annual_chart(url, data, year, selected_eac)")
+        chart = source.index("render_annual_chart(url, data, year, selected_eac, reference)")
         self.assertLess(table, selector)
         self.assertLess(selector, chart)
         self.assertIn("index=0, format_func=lambda v: choices[v]", source)
@@ -114,6 +115,89 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(trace.mode, "lines+markers")
         self.assertFalse(any(t.mode == "text" for t in chart.call_args.args[0].data))
 
+    def test_bar_poe_matches_visible_annual_table_and_changes_with_year(self):
+        data = {"directors": {"A": "FIRST", "B": "HIDDEN", "C": "THIRD"},
+                "visible": {"A": True, "B": False, "C": True},
+                "hours": {
+                    ("A", date(2026, 1, 1)): (Decimal(100), Decimal(200)),
+                    ("A", date(2026, 2, 1)): (None, Decimal(50)),
+                    ("A", date(2026, 3, 1)): (Decimal(0), Decimal(90)),
+                    ("A", date(2025, 1, 1)): (Decimal(70), None),
+                    ("B", date(2026, 1, 1)): (Decimal(400), None),
+                }}
+        sources = [{"code": "A", "eac_hours": Decimal(1000),
+                    "incurred_hours": Decimal(350), "projects": 2},
+                   {"code": "C", "eac_hours": None, "incurred_hours": None,
+                    "projects": None}]
+        frame = director_bar_frame(data, 2026, sources)
+        self.assertEqual(frame.management_group.tolist(), ["A FIRST", "C THIRD"])
+        self.assertEqual(frame.loc[0, "poe_hours"], Decimal(150))
+        self.assertEqual(frame.loc[0, "etc_hours"], Decimal(1000))
+        self.assertEqual(frame.loc[0, "hours_incurred"], Decimal(350))
+        self.assertIsNone(frame.loc[1, "poe_hours"])
+        self.assertEqual(director_bar_frame(data, 2025, sources).loc[0, "poe_hours"],
+                         Decimal(70))
+        self.assertIsNone(director_bar_frame(data, 2025, sources).loc[1, "poe_hours"])
+
+    def test_bar_uses_shared_eac_chart_and_lime_poe(self):
+        data = {"directors": {"A": "FIRST"}, "visible": {"A": True},
+                "hours": {("A", date(2026, 1, 1)): (Decimal(10), None)}}
+        with patch("poe_board.eac_chart") as chart, \
+             patch("poe_board.st.subheader"), patch("poe_board.st.caption"):
+            render_director_bars(data, 2026, [
+                {"code": "A", "eac_hours": Decimal(500),
+                 "incurred_hours": Decimal(200)}
+            ])
+        chart.assert_called_once()
+        args, kwargs = chart.call_args
+        self.assertEqual(args[1], "management_group")
+        self.assertEqual(list(kwargs["metrics"].values()),
+                         ["EAC", "POE", "Incurrido OF"])
+        self.assertEqual(kwargs["palette"]["POE"], LIME)
+
+    def test_bar_snapshot_query_one_read_latest_ct422_and_cached(self):
+        class DB:
+            def __init__(self):
+                self.calls = []
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, sql, params=()):
+                self.calls.append((sql, params))
+                return self
+            def fetchall(self):
+                return [{"code": "A", "eac_hours": Decimal(1000),
+                         "incurred_hours": Decimal(200), "projects": 2,
+                         "erp_date": date(2026, 10, 15)}]
+        db = DB()
+        director_bar_sources.clear()
+        with patch("poe_board.connect", return_value=db):
+            sources = director_bar_sources("unused", 9, ("A",))
+            self.assertEqual(director_bar_sources("unused", 9, ("A",)), sources)
+        self.assertEqual(len(db.calls), 1)
+        sql, params = db.calls[0]
+        self.assertEqual(params, (9, ["A"]))
+        self.assertIn("MAX(snapshot_date)", sql)
+        self.assertIn("work_center='422'", sql)
+        self.assertIn("eac_project_hours", sql)
+        self.assertNotIn("UPDATE ", sql)
+        self.assertNotIn("INSERT ", sql)
+        self.assertNotIn("DELETE ", sql)
+
+    def test_annual_chart_reuses_bar_reference_without_extra_db(self):
+        data = {"directors": {"A": "FIRST"}, "visible": {"A": True},
+                "opening": {"A": None}, "opening_count": {"A": 0},
+                "hours": {("A", date(2026, 1, 1)): (Decimal(100), None)}}
+        reference = {"year": 2026, "quarter": 3,
+                     "eac_hours": Decimal(500), "projects": 2}
+        with patch("poe_board.director_eac") as redundant, \
+             patch("poe_board.st.plotly_chart") as plot, \
+             patch("poe_board.st.subheader"), patch("poe_board.st.caption"):
+            render_annual_chart("unused", data, 2026, 9, reference)
+        redundant.assert_not_called()
+        self.assertEqual(plot.call_args.args[0].data[0].y[0], 500)
+
     def test_2025_dragon_real_series_from_neon_and_no_forecast(self):
         data = {"directors": {"110040": "DRAGON"}, "visible": {"110040": True},
                 "opening": {"110040": None}, "opening_count": {"110040": 0},
@@ -135,7 +219,7 @@ class POEV5Tests(unittest.TestCase):
                        and n.func.id == "render_annual_chart"]
         self.assertEqual(len(chart_calls), 1)
         self.assertEqual([a.id for a in chart_calls[0].args],
-                         ["url", "data", "year", "selected_eac"])
+                         ["url", "data", "year", "selected_eac", "reference"])
         # No additional year is loaded just to draw the plot.
         self.assertNotIn("chart_year", inspect.getsource(render))
 
