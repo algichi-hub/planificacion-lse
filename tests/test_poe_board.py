@@ -140,6 +140,48 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(forecast[10:], [11894, 12446])
         self.assertEqual(gaps, [])
 
+    def test_forecast_is_visible_alongside_real_for_every_recorded_month(self):
+        period = lambda month: date(2026, month, 1)
+        data = {"hours": {
+            ("A", period(1)): (Decimal(100), None),
+            ("A", period(2)): (Decimal(120), Decimal(150)),
+            ("A", period(3)): (Decimal(90), Decimal(80)),
+            ("A", period(4)): (Decimal(0), Decimal(0)),
+            ("A", period(6)): (None, Decimal(40)),
+            ("A", period(8)): (Decimal(70), Decimal(60)),
+            ("A", period(10)): (None, Decimal(25)),
+        }, "opening": {"A": Decimal(500)}, "opening_count": {"A": 1}}
+        actual, planned, last_real, gaps = annual_evolution(data, "A", 2026)
+        self.assertEqual(actual[0:4], [600, 720, 810, 810])
+        self.assertEqual(planned[0:4], [None, 750, 830, 830])
+        self.assertEqual(planned[5], 870)
+        self.assertEqual(planned[7], 930)
+        self.assertEqual(planned[9], 955)
+        self.assertEqual(actual[7], 880)
+        self.assertEqual(last_real, 8)
+        self.assertIn(5, gaps)
+        self.assertIsNone(planned[4])
+        self.assertEqual(len(planned), 12)
+
+    def test_plot_does_not_overwrite_forecast_on_last_real_month(self):
+        period = date(2026, 10, 1)
+        data = {"directors": {"A": "DIRECTOR"}, "visible": {"A": True},
+                "opening": {"A": None}, "opening_count": {"A": 0},
+                "hours": {("A", period): (Decimal(90), Decimal(75)),
+                          ("A", date(2026, 11, 1)): (None, Decimal(40))}}
+        with patch("poe_board.director_eac", return_value=None), \
+             patch("poe_board.st.plotly_chart") as chart, \
+             patch("poe_board.st.subheader"), \
+             patch("poe_board.st.warning"), \
+             patch("poe_board.st.caption"):
+            render_annual_chart("unused", data, 2026)
+        figure = chart.call_args.args[0]
+        planned_trace = next(t for t in figure.data if t.name == "Previsto acumulado")
+        real_trace = next(t for t in figure.data if t.name == "Incurrido real acumulado")
+        self.assertEqual(planned_trace.y[9], 75)
+        self.assertEqual(planned_trace.y[10], 115)
+        self.assertEqual(real_trace.y[9], 90)
+
     def test_manual_opening_real_includes_previous_year(self):
         data = {"hours": {("A", date(2026, 1, 1)): (Decimal(100), None),
                           ("A", date(2026, 2, 1)): (None, Decimal(50))},
