@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import psycopg
 from psycopg.rows import dict_row
 import streamlit as st
-from eac_board import list_snapshots
+from eac_board import chart as eac_chart, list_snapshots
 
 MONTHS = ("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
           "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
@@ -285,6 +285,81 @@ def director_eac(url, code, snapshot_id):
         """, (snapshot_id, code)).fetchone()
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def director_bar_sources(url, snapshot_id, codes):
+    """One grouped read for selected EAC and latest CT 422 ERP snapshot."""
+    with connect(url) as conn:
+        return conn.execute("""
+            WITH manager_codes AS (
+                SELECT project_code,
+                       substring(btrim(project_manager) FROM '^[^[:space:]]+') AS code
+                FROM projects
+            ), eac AS (
+                SELECT m.code, SUM(e.etc_hours) AS eac_hours,
+                       COUNT(e.etc_hours) AS projects
+                FROM eac_project_hours e
+                JOIN manager_codes m USING (project_code)
+                WHERE e.snapshot_id = %s
+                GROUP BY m.code
+            ), latest AS (
+                SELECT MAX(snapshot_date) AS snapshot_date FROM fact_hours
+                WHERE work_center='422'
+            ), incurred AS (
+                SELECT m.code, SUM(f.hours_incurred) AS incurred_hours
+                FROM fact_hours f
+                JOIN latest l ON f.snapshot_date=l.snapshot_date
+                JOIN manager_codes m USING (project_code)
+                WHERE f.work_center='422'
+                GROUP BY m.code
+            )
+            SELECT d.code, e.eac_hours, e.projects, i.incurred_hours,
+                   (SELECT snapshot_date FROM latest) AS erp_date
+            FROM unnest(%s::text[]) AS d(code)
+            LEFT JOIN eac e ON e.code=d.code
+            LEFT JOIN incurred i ON i.code=d.code
+        """, (snapshot_id, list(codes))).fetchall()
+
+
+def director_bar_frame(data, year, sources):
+    """Annual POE total sums exactly the real-priority cells shown in the table."""
+    by_code = {r["code"]: r for r in sources}
+    rows = []
+    for code, name in data["directors"].items():
+        if not data.get("visible", {}).get(code, True):
+            continue
+        values = [data["hours"].get((code, date(year, month, 1)), (None, None))
+                  for month in range(1, 13)]
+        selected = [real if real is not None else planned for real, planned in values
+                    if real is not None or planned is not None]
+        source = by_code.get(code, {})
+        rows.append({
+            "management_group": f"{code} {name}",
+            "etc_hours": source.get("eac_hours"),
+            "poe_hours": sum(selected, Decimal(0)) if selected else None,
+            "hours_incurred": source.get("incurred_hours"),
+        })
+    return pd.DataFrame(rows, columns=[
+        "management_group", "etc_hours", "poe_hours", "hours_incurred"
+    ])
+
+
+def render_director_bars(data, year, sources):
+    """Reuse the grouped director bars of the EAC dashboard."""
+    frame = director_bar_frame(data, year, sources)
+    if frame.empty:
+        st.info("No hay directores visibles para comparar.")
+        return
+    st.subheader("EAC vs POE vs Incurrido OF por director")
+    st.caption(f"POE: suma de enero a diciembre de {year} (real prioritario). "
+               "Incurrido OF: último snapshot CT 422.")
+    eac_chart(frame, "management_group", metrics={
+        "etc_hours": "EAC", "poe_hours": "POE",
+        "hours_incurred": "Incurrido OF",
+    }, palette={
+        "EAC": "#D5A547", "POE": LIME, "Incurrido OF": "#1F4E8C",
+    })
+
+
 def annual_evolution(data, code, year):
     """Plot real and planned cumulatives for every month with each source value."""
     opening = data.get("opening", {}).get(code)
@@ -309,7 +384,7 @@ def annual_evolution(data, code, year):
     return actual, forecast, last_actual, gaps
 
 
-def render_annual_chart(url, data, year, snapshot_id):
+def render_annual_chart(url, data, year, snapshot_id, reference=None):
     """Draw one director: the first visible row in the annual POE view."""
     visible_codes = [c for c in data["directors"]
                      if data.get("visible", {}).get(c, True)]
@@ -317,11 +392,12 @@ def render_annual_chart(url, data, year, snapshot_id):
         st.info("No hay directores visibles para representar.")
         return
     code = visible_codes[0]
-    try:
-        reference = director_eac(url, code, snapshot_id)
-    except psycopg.Error as exc:
-        st.warning(f"No se pudo consultar el EAC de referencia: {type(exc).__name__}")
-        reference = None
+    if reference is None:
+        try:
+            reference = director_eac(url, code, snapshot_id)
+        except psycopg.Error as exc:
+            st.warning(f"No se pudo consultar el EAC de referencia: {type(exc).__name__}")
+            reference = None
 
     actual, forecast, last_actual, gaps = annual_evolution(data, code, year)
     if (last_actual is not None and last_actual < 12
@@ -537,13 +613,33 @@ def render(url):
             selected_eac = st.selectbox("Snapshot EAC para la gráfica", list(choices),
                                         index=0, format_func=lambda v: choices[v],
                                         key="poe_v5_chart_eac_snapshot")
-            # Reuse the selected year's POE frame and one cached EAC aggregate.
-            render_annual_chart(url, data, year, selected_eac)
+            # One cached grouped query serves both charts; POE hours remain local.
+            codes = tuple(code for code in data["directors"]
+                          if data.get("visible", {}).get(code, True))
+            if codes:
+                try:
+                    sources = director_bar_sources(url, selected_eac, codes)
+                except psycopg.Error as exc:
+                    st.warning(f"No se pudo leer la comparativa EAC/OF: {type(exc).__name__}")
+                    sources = []
+                if sources:
+                    render_director_bars(data, year, sources)
+                    first = next(r for r in sources if r["code"] == codes[0])
+                    metadata = snapshots.loc[snapshots["id"] == selected_eac].iloc[0]
+                    reference = {
+                        "year": int(metadata["year"]), "quarter": int(metadata["quarter"]),
+                        "eac_hours": first["eac_hours"],
+                        "projects": first["projects"] or 0,
+                    }
+                    render_annual_chart(url, data, year, selected_eac, reference)
+            else:
+                st.info("No hay directores visibles para representar.")
         refresh, sync = st.columns(2)
         if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
             state["poe_v5_cache"] = {}
             director_eac.clear()
             available_eac_snapshots.clear()
+            director_bar_sources.clear()
             st.rerun()
         if sync.button("Sincronizar directores", help="Incorporar directores nuevos desde ERP sin modificar los existentes."):
             try:
