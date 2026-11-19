@@ -618,6 +618,22 @@ def render(url):
         st.caption("Verde lima = real registrado (incluye cero). Sin fondo = previsto o vacío.")
         st.dataframe(style_annual(data, year), hide_index=True,
                      use_container_width=True)
+        refresh, sync = st.columns(2)
+        if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
+            state["poe_v5_cache"] = {}
+            director_eac.clear()
+            available_eac_snapshots.clear()
+            director_bar_sources.clear()
+            st.rerun()
+        if sync.button("Sincronizar directores", help="Incorporar directores nuevos desde ERP sin modificar los existentes."):
+            try:
+                added = sync_directors(url)
+                state["poe_v5_cache"] = {}
+                st.toast(f"{len(added)} directores nuevos incorporados.")
+                st.rerun()
+            except psycopg.Error as exc:
+                st.error(str(exc))
+
         # EAC catalog shares the source and descending order of the EAC board.
         try:
             snapshots = available_eac_snapshots(url)
@@ -653,18 +669,3 @@ def render(url):
                     render_annual_chart(url, data, year, selected_eac, reference)
             else:
                 st.info("No hay directores visibles para representar.")
-        refresh, sync = st.columns(2)
-        if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
-            state["poe_v5_cache"] = {}
-            director_eac.clear()
-            available_eac_snapshots.clear()
-            director_bar_sources.clear()
-            st.rerun()
-        if sync.button("Sincronizar directores", help="Incorporar directores nuevos desde ERP sin modificar los existentes."):
-            try:
-                added = sync_directors(url)
-                state["poe_v5_cache"] = {}
-                st.toast(f"{len(added)} directores nuevos incorporados.")
-                st.rerun()
-            except psycopg.Error as exc:
-                st.error(str(exc))
