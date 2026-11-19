@@ -355,18 +355,19 @@ def comparison_table(frame, labels, filename, key):
     )
 
 
-def chart(frame, category):
-    """Barras por director verticales y por proyecto horizontales."""
-    data = frame.melt(
-        id_vars=[category],
-        value_vars=["etc_hours", "hours_granted", "hours_incurred"],
-        var_name="serie", value_name="horas",
-    )
-    data["serie"] = data["serie"].map({
+def chart(frame, category, metrics=None, palette=None):
+    """Reusable bars: original EAC view or POE's chosen three-series comparison."""
+    metrics = metrics or {
         "etc_hours": "EAC",
         "hours_granted": "Concedidas",
         "hours_incurred": "Incurridas",
-    })
+    }
+    data = frame.melt(
+        id_vars=[category],
+        value_vars=list(metrics),
+        var_name="serie", value_name="horas",
+    )
+    data["serie"] = data["serie"].map(metrics)
     data = data.dropna(subset=["horas"])
     if data.empty:
         st.info("No hay horas disponibles para este gráfico.")
@@ -381,14 +382,14 @@ def chart(frame, category):
         color="serie",
         orientation="h" if horizontal else "v",
         barmode="group",
-        color_discrete_map={
+        color_discrete_map=palette or {
             "EAC": "#D5A547",
             "Concedidas": "#70B7EA",
             "Incurridas": "#1F4E8C",
         },
         category_orders={
             category: ordered_codes,
-            "serie": ["EAC", "Concedidas", "Incurridas"],
+            "serie": list(metrics.values()),
         },
         labels={
             category: "Director" if category == "management_group" else "Proyecto",
