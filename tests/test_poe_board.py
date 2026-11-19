@@ -87,9 +87,15 @@ class POEV5Tests(unittest.TestCase):
         figure = chart.call_args.args[0]
         real = next(trace for trace in figure.data if trace.name == "Incurrido real acumulado")
         limit = next(trace for trace in figure.data if trace.name == "Límite EAC")
-        self.assertEqual(real.text[0:2], ("25.0%", "30.0%"))
-        self.assertIsNone(real.text[2])
-        self.assertEqual(real.mode, "lines+markers+text")
+        labels = figure.data[-1]
+        self.assertEqual(labels.text[0:2], ("<b>25.0%</b>", "<b>30.0%</b>"))
+        self.assertIsNone(labels.text[2])
+        self.assertEqual(labels.mode, "text")
+        self.assertEqual(labels.textfont.size, 15)
+        self.assertEqual(labels.showlegend, False)
+        self.assertEqual(labels.hoverinfo, "skip")
+        self.assertFalse(labels.cliponaxis)
+        self.assertEqual(real.mode, "lines+markers")
         self.assertEqual(limit.y[0], 1000)
 
     def test_no_percentage_when_selected_eac_zero(self):
@@ -106,7 +112,7 @@ class POEV5Tests(unittest.TestCase):
         trace = next(trace for trace in chart.call_args.args[0].data
                      if trace.name == "Incurrido real acumulado")
         self.assertEqual(trace.mode, "lines+markers")
-        self.assertTrue(all(x is None for x in trace.text))
+        self.assertFalse(any(t.mode == "text" for t in chart.call_args.args[0].data))
 
     def test_2025_dragon_real_series_from_neon_and_no_forecast(self):
         data = {"directors": {"110040": "DRAGON"}, "visible": {"110040": True},
