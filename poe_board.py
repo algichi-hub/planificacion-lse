@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import psycopg
 from psycopg.rows import dict_row
 import streamlit as st
+from eac_board import list_snapshots
 
 MONTHS = ("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
           "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
@@ -263,8 +264,14 @@ def style_annual(data, year):
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def director_eac(url, code):
-    """Latest published EAC total for this director; one read, no writes."""
+def available_eac_snapshots(url):
+    """Same EAC snapshot catalog and order as the EAC section."""
+    return list_snapshots(url)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def director_eac(url, code, snapshot_id):
+    """Sum the chosen EAC snapshot for this director; no writes."""
     with connect(url) as conn:
         return conn.execute("""
             SELECT s.year,s.quarter, SUM(e.etc_hours) AS eac_hours,
@@ -272,12 +279,10 @@ def director_eac(url, code):
             FROM eac_snapshots s
             LEFT JOIN eac_project_hours e ON e.snapshot_id=s.id
             LEFT JOIN projects p ON p.project_code=e.project_code
-            WHERE s.status='published' AND s.id=(
-                SELECT id FROM eac_snapshots WHERE status='published'
-                ORDER BY year DESC,quarter DESC LIMIT 1
-            ) AND substring(btrim(p.project_manager) FROM '^[^[:space:]]+')=%s
+            WHERE s.id=%s
+              AND substring(btrim(p.project_manager) FROM '^[^[:space:]]+')=%s
             GROUP BY s.id,s.year,s.quarter
-        """, (code,)).fetchone()
+        """, (snapshot_id, code)).fetchone()
 
 
 def annual_evolution(data, code, year):
@@ -304,7 +309,7 @@ def annual_evolution(data, code, year):
     return actual, forecast, last_actual, gaps
 
 
-def render_annual_chart(url, data, year):
+def render_annual_chart(url, data, year, snapshot_id):
     """Draw one director: the first visible row in the annual POE view."""
     visible_codes = [c for c in data["directors"]
                      if data.get("visible", {}).get(c, True)]
@@ -313,7 +318,7 @@ def render_annual_chart(url, data, year):
         return
     code = visible_codes[0]
     try:
-        reference = director_eac(url, code)
+        reference = director_eac(url, code, snapshot_id)
     except psycopg.Error as exc:
         st.warning(f"No se pudo consultar el EAC de referencia: {type(exc).__name__}")
         reference = None
@@ -332,8 +337,16 @@ def render_annual_chart(url, data, year):
     fig.add_trace(go.Scatter(x=MONTHS, y=forecast, name="Previsto acumulado",
                              mode="lines+markers", connectgaps=False,
                              line=dict(color="#89939B", width=3)))
+    eac_total = (float(reference["eac_hours"])
+                 if reference and reference["eac_hours"] is not None else None)
+    percentages = ([f"{value / eac_total:.1%}" if value is not None else None
+                    for value in actual]
+                   if eac_total is not None and eac_total > 0 else [None] * 12)
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
-                             mode="lines+markers", connectgaps=False,
+                             mode="lines+markers+text" if eac_total and eac_total > 0 else "lines+markers",
+                             text=percentages, textposition="top center",
+                             textfont=dict(size=10, color="#198754"),
+                             cliponaxis=False, connectgaps=False,
                              line=dict(color="#198754", width=3)))
     values = ([float(reference["eac_hours"])]
               if reference and reference["eac_hours"] is not None else [])
@@ -505,12 +518,27 @@ def render(url):
         st.caption("Verde lima = real registrado (incluye cero). Sin fondo = previsto o vacío.")
         st.dataframe(style_annual(data, year), hide_index=True,
                      use_container_width=True)
-        # Reuse the selected year's data already loaded for the annual table.
-        render_annual_chart(url, data, year)
+        # EAC catalog shares the source and descending order of the EAC board.
+        try:
+            snapshots = available_eac_snapshots(url)
+        except psycopg.Error as exc:
+            st.warning(f"No se pueden leer los snapshots EAC: {type(exc).__name__}")
+            snapshots = pd.DataFrame()
+        if snapshots.empty:
+            st.warning("No hay snapshots EAC disponibles para la gráfica.")
+        else:
+            choices = {int(x.id): f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
+                       for x in snapshots.itertuples(index=False)}
+            selected_eac = st.selectbox("Snapshot EAC para la gráfica", list(choices),
+                                        index=0, format_func=lambda v: choices[v],
+                                        key="poe_v5_chart_eac_snapshot")
+            # Reuse the selected year's POE frame and one cached EAC aggregate.
+            render_annual_chart(url, data, year, selected_eac)
         refresh, sync = st.columns(2)
         if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
             state["poe_v5_cache"] = {}
             director_eac.clear()
+            available_eac_snapshots.clear()
             st.rerun()
         if sync.button("Sincronizar directores", help="Incorporar directores nuevos desde ERP sin modificar los existentes."):
             try:
