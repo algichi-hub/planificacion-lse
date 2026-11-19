@@ -350,8 +350,12 @@ def render_director_bars(data, year, sources):
         st.info("No hay directores visibles para comparar.")
         return
     st.subheader("EAC vs POE vs Incurrido OF por director")
+    erp_date = sources[0].get("erp_date") if sources else None
     st.caption(f"POE: suma de enero a diciembre de {year} (real prioritario). "
-               "Incurrido OF: último snapshot CT 422.")
+               f"Incurrido OF: CT 422 · {erp_date:%d/%m/%Y}."
+               if erp_date else
+               f"POE: suma de enero a diciembre de {year} (real prioritario). "
+               "Sin snapshot OF del CT 422.")
     eac_chart(frame, "management_group", metrics={
         "etc_hours": "EAC", "poe_hours": "POE",
         "hours_incurred": "Incurrido OF",
