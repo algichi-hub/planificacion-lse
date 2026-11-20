@@ -407,14 +407,16 @@ def annual_evolution(data, code, year):
     return actual, forecast, last_actual, gaps
 
 
-def render_annual_chart(url, data, year, snapshot_id, reference=None):
-    """Draw one director: the first visible row in the annual POE view."""
-    visible_codes = [c for c in data["directors"]
-                     if data.get("visible", {}).get(c, True)]
-    if not visible_codes:
-        st.info("No hay directores visibles para representar.")
+def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None):
+    """Draw only a selected visible director with monthly POE data for the year."""
+    if code is None or code not in data["directors"] or not data.get("visible", {}).get(code, True):
+        st.info("Sin datos")
         return
-    code = visible_codes[0]
+    if not any(any(v is not None for v in data["hours"].get(
+            (code, date(year, month, 1)), (None, None)))
+            for month in range(1, 13)):
+        st.info("Sin datos")
+        return
     if reference is None:
         try:
             reference = director_eac(url, code, snapshot_id)
@@ -462,7 +464,7 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
                       yaxis=dict(range=[0, upper], fixedrange=True),
                       dragmode=False,
                       legend=dict(orientation="h",y=-0.2),hovermode="x unified")
-    st.subheader(f"Evolución {year} · {data['directors'][code]}")
+    st.subheader(f"Evolución {year} · {code} {data['directors'][code]}")
     st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}",
                     config={"displayModeBar": False, "scrollZoom": False,
                             "doubleClick": False})
