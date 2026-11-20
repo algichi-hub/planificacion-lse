@@ -70,6 +70,37 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(source.count('refresh.button("Actualizar POE"'), 1)
         self.assertEqual(source.count('sync.button("Sincronizar directores"'), 1)
 
+    def test_single_year_selector_and_edit_button_grouped(self):
+        source = inspect.getsource(render)
+        self.assertEqual(source.count('number_input("Año"'), 1)
+        table = source.index("st.dataframe(style_annual(data, year)")
+        actions = source.index("refresh, sync, edit = st.columns(3)")
+        edit = source.index('edit.button("Abrir modo edición"')
+        trend = source.index('st.subheader("Evolución anual por director")')
+        self.assertLess(table, actions)
+        self.assertLess(actions, edit)
+        self.assertLess(edit, trend)
+        self.assertIn('key="poe_v5_open_edit"', source)
+        self.assertIn('background:#003087', source)
+
+    def test_poe_bar_temporal_caption_with_mixed_directors(self):
+        data = {"directors": {"A": "ONE", "B": "TWO"},
+                "visible": {"A": True, "B": True}, "hours": {}}
+        sources = [
+            {"code": "A", "last_real": date(2025, 12, 1),
+             "first_forecast": None, "erp_date": date(2026, 10, 15)},
+            {"code": "B", "last_real": date(2026, 10, 1),
+             "first_forecast": date(2026, 11, 1),
+             "erp_date": date(2026, 10, 15)},
+        ]
+        with patch("poe_board.eac_chart"), patch("poe_board.st.subheader"), \
+             patch("poe_board.st.caption") as caption:
+            render_director_bars(data, sources)
+        label = caption.call_args.args[0]
+        self.assertIn("hasta DIC/2025–OCT/2026", label)
+        self.assertIn("desde NOV/2026", label)
+        self.assertIn("Incurrido OFs (15/10/2026)", label)
+
     def test_lazy_evolution_selector_and_year_specific_data(self):
         source = inspect.getsource(render)
         self.assertIn('codes, index=None', source)
@@ -112,7 +143,15 @@ class POEV5Tests(unittest.TestCase):
         figure = chart.call_args.args[0]
         real = next(trace for trace in figure.data if trace.name == "Incurrido real acumulado")
         limit = next(trace for trace in figure.data if trace.name == "Límite EAC")
-        labels = figure.data[-1]
+        labels = next(t for t in figure.data if t.name == "Porcentaje incurrido")
+        eac_label = figure.data[-1]
+        self.assertEqual(eac_label.name, "Etiqueta EAC")
+        self.assertEqual(eac_label.text, ("<b>EAC=1.000</b>",))
+        self.assertEqual(eac_label.mode, "text")
+        self.assertEqual(eac_label.textfont.color, "#F28C28")
+        self.assertEqual(eac_label.textfont.size, 15)
+        self.assertEqual(eac_label.showlegend, False)
+        self.assertEqual(eac_label.hoverinfo, "skip")
         self.assertEqual(labels.text[0:2], ("<b>25.0%</b>", "<b>30.0%</b>"))
         self.assertIsNone(labels.text[2])
         self.assertEqual(labels.mode, "text")
@@ -137,7 +176,9 @@ class POEV5Tests(unittest.TestCase):
         trace = next(trace for trace in chart.call_args.args[0].data
                      if trace.name == "Incurrido real acumulado")
         self.assertEqual(trace.mode, "lines+markers")
-        self.assertFalse(any(t.mode == "text" for t in chart.call_args.args[0].data))
+        self.assertFalse(any(t.name == "Porcentaje incurrido"
+                             for t in chart.call_args.args[0].data))
+        self.assertEqual(sum(t.name == "Etiqueta EAC" for t in chart.call_args.args[0].data), 1)
 
     def test_bar_poe_lifetime_totals_independent_of_selected_year(self):
         data = {"directors": {"A": "FIRST", "B": "HIDDEN", "C": "THIRD"},
@@ -279,8 +320,8 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(traces["Límite EAC"].line.color, "#F28C28")
         self.assertEqual(traces["Previsto acumulado"].line.color, "#E7E9EB")
         self.assertEqual(traces["Previsto acumulado"].line.dash, "dot")
-        self.assertEqual(traces["Incurrido real acumulado"].line.color, "#003087")
-        self.assertEqual(traces["Porcentaje incurrido"].textfont.color, "#003087")
+        self.assertEqual(traces["Incurrido real acumulado"].line.color, "#2563EB")
+        self.assertEqual(traces["Porcentaje incurrido"].textfont.color, "#2563EB")
         self.assertEqual(plot.call_args.args[0].layout.yaxis.range[0], 0)
 
     def test_2025_dragon_real_series_from_neon_and_no_forecast(self):
