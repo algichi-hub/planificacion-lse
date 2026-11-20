@@ -450,7 +450,7 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
         fig.add_trace(go.Scatter(x=MONTHS, y=[float(reference["eac_hours"])] * 12,
                                  name="Límite EAC", mode="lines",
                                  line=dict(color=EAC_ORANGE, width=2, dash="dash")))
-    fig.add_trace(go.Scatter(x=MONTHS, y=forecast, name="Previsto acumulado",
+    fig.add_trace(go.Scatter(x=MONTHS, y=forecast, name="POE previsto",
                              mode="lines+markers", connectgaps=False,
                              line=dict(color=FORECAST_LIGHT, width=3, dash="dot")))
     eac_total = (float(reference["eac_hours"])
@@ -458,7 +458,7 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
     percentages = ([f"{value / eac_total:.1%}" if value is not None else None
                     for value in actual]
                    if eac_total is not None and eac_total > 0 else [None] * 12)
-    fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
+    fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="POE incurrido",
                              mode="lines+markers", connectgaps=False,
                              line=dict(color=POE_BLUE, width=3)))
     # Render labels in the final trace so no curve or marker covers them.
