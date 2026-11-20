@@ -141,7 +141,7 @@ class POEV5Tests(unittest.TestCase):
             render_annual_chart("unused", data, 2026, 9, code="A")
         get_eac.assert_called_once_with("unused", "A", 9)
         figure = chart.call_args.args[0]
-        real = next(trace for trace in figure.data if trace.name == "Incurrido real acumulado")
+        real = next(trace for trace in figure.data if trace.name == "POE incurrido")
         limit = next(trace for trace in figure.data if trace.name == "Límite EAC")
         labels = next(t for t in figure.data if t.name == "Porcentaje incurrido")
         eac_label = figure.data[-1]
@@ -174,7 +174,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.caption"):
             render_annual_chart("unused", data, 2026, 1, code="A")
         trace = next(trace for trace in chart.call_args.args[0].data
-                     if trace.name == "Incurrido real acumulado")
+                     if trace.name == "POE incurrido")
         self.assertEqual(trace.mode, "lines+markers")
         self.assertFalse(any(t.name == "Porcentaje incurrido"
                              for t in chart.call_args.args[0].data))
@@ -318,9 +318,11 @@ class POEV5Tests(unittest.TestCase):
             render_annual_chart("unused", data, 2026, 1, reference=ref, code="A")
         traces = {t.name: t for t in plot.call_args.args[0].data}
         self.assertEqual(traces["Límite EAC"].line.color, "#F28C28")
-        self.assertEqual(traces["Previsto acumulado"].line.color, "#E7E9EB")
-        self.assertEqual(traces["Previsto acumulado"].line.dash, "dot")
-        self.assertEqual(traces["Incurrido real acumulado"].line.color, "#2563EB")
+        self.assertEqual(traces["POE previsto"].line.color, "#E7E9EB")
+        self.assertEqual(traces["POE previsto"].line.dash, "dot")
+        self.assertEqual(traces["POE incurrido"].line.color, "#2563EB")
+        self.assertEqual([t.name for t in plot.call_args.args[0].data if t.showlegend is not False],
+                         ["Límite EAC", "POE previsto", "POE incurrido"])
         self.assertEqual(traces["Porcentaje incurrido"].textfont.color, "#2563EB")
         self.assertEqual(plot.call_args.args[0].layout.yaxis.range[0], 0)
 
@@ -447,8 +449,8 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.caption"):
             render_annual_chart("unused", data, 2026, 1, code="A")
         figure = chart.call_args.args[0]
-        planned_trace = next(t for t in figure.data if t.name == "Previsto acumulado")
-        real_trace = next(t for t in figure.data if t.name == "Incurrido real acumulado")
+        planned_trace = next(t for t in figure.data if t.name == "POE previsto")
+        real_trace = next(t for t in figure.data if t.name == "POE incurrido")
         self.assertEqual(planned_trace.y[9], 75)
         self.assertEqual(planned_trace.y[10], 115)
         self.assertEqual(real_trace.y[9], 90)
