@@ -174,7 +174,7 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(list(kwargs["metrics"].values()),
                          ["EAC", "POE real", "POE previsto", "Incurrido OF"])
         self.assertEqual(kwargs["palette"]["POE real"], LIME)
-        self.assertEqual(kwargs["palette"]["POE previsto"], "#E9EBEC")
+        self.assertEqual(kwargs["palette"]["POE previsto"], "#E7E9EB")
         self.assertEqual(kwargs["stack_groups"]["POE real"], "POE")
         self.assertEqual(kwargs["stack_groups"]["POE previsto"], "POE")
         self.assertNotEqual(kwargs["stack_groups"]["EAC"], "POE")
@@ -277,7 +277,7 @@ class POEV5Tests(unittest.TestCase):
             render_annual_chart("unused", data, 2026, 1, reference=ref, code="A")
         traces = {t.name: t for t in plot.call_args.args[0].data}
         self.assertEqual(traces["Límite EAC"].line.color, "#F28C28")
-        self.assertEqual(traces["Previsto acumulado"].line.color, "#E9EBEC")
+        self.assertEqual(traces["Previsto acumulado"].line.color, "#E7E9EB")
         self.assertEqual(traces["Previsto acumulado"].line.dash, "dot")
         self.assertEqual(traces["Incurrido real acumulado"].line.color, "#003087")
         self.assertEqual(traces["Porcentaje incurrido"].textfont.color, "#003087")
