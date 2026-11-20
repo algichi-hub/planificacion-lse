@@ -16,7 +16,7 @@ LIME = "#C5F27A"
 GDELS_BLUE = "#003087"
 EAC_ORANGE = "#F28C28"
 FORECAST_GRAY = "#89939B"
-FORECAST_LIGHT = "#E9EBEC"  # 20% of grey over white
+FORECAST_LIGHT = "#E7E9EB"  # 20% of #89939B over white
 
 
 def connect(url):
@@ -674,6 +674,8 @@ def render(url):
         st.subheader("Evolución anual por director")
         codes = [code for code in data["directors"]
                  if data.get("visible", {}).get(code, True)]
+        if state.get("poe_v5_evolution_director") not in (None, *codes):
+            state["poe_v5_evolution_director"] = None
         selected_director = st.selectbox(
             "Director para evolución", codes, index=None,
             placeholder="Seleccionar director",
