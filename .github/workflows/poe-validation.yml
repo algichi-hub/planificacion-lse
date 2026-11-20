@@ -1,7 +1,7 @@
 name: POE validation
 on:
   push:
-    branches: [v0/sql-dashboard, feature/poe-board, feature/poe-v5, fix/poe-navigation-conflict, feature/poe-visibility-refresh, fix/poe-current-year-default, feature/poe-annual-eac-chart, fix/poe-chart-selected-year, fix/poe-fixed-axis-static-controls, fix/poe-forecast-all-months, feature/poe-eac-selector-percent, fix/poe-percent-label-overlay, feature/poe-director-bars, feature/poe-lifetime-stacked-bars, fix/poe-buttons-below-table, feature/poe-layout-v2]
+    branches: [v0/sql-dashboard, feature/poe-board, feature/poe-v5, fix/poe-navigation-conflict, feature/poe-visibility-refresh, fix/poe-current-year-default, feature/poe-annual-eac-chart, fix/poe-chart-selected-year, fix/poe-fixed-axis-static-controls, fix/poe-forecast-all-months, feature/poe-eac-selector-percent, fix/poe-percent-label-overlay, feature/poe-director-bars, feature/poe-lifetime-stacked-bars, fix/poe-buttons-below-table, feature/poe-layout-v2, feature/poe-actions-eac-label]
   workflow_dispatch:
 jobs:
   tests:

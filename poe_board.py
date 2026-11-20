@@ -14,6 +14,7 @@ MONTHS = ("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
           "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
 LIME = "#C5F27A"
 GDELS_BLUE = "#003087"
+POE_BLUE = "#2563EB"
 EAC_ORANGE = "#F28C28"
 FORECAST_GRAY = "#89939B"
 FORECAST_LIGHT = "#E7E9EB"  # 20% of #89939B over white
@@ -322,6 +323,11 @@ def director_bar_sources(url, snapshot_id, codes):
                 GROUP BY code
             ), poe_totals AS (
                 SELECT h.code,
+                       MAX(l.last_real) AS last_real,
+                       MIN(h.period) FILTER (
+                           WHERE h.planned_hours IS NOT NULL
+                             AND (l.last_real IS NULL OR h.period > l.last_real)
+                       ) AS first_forecast,
                        SUM(h.real_hours) AS real_total,
                        SUM(h.planned_hours) FILTER (
                            WHERE l.last_real IS NULL OR h.period > l.last_real
@@ -332,6 +338,7 @@ def director_bar_sources(url, snapshot_id, codes):
             )
             SELECT d.code, e.eac_hours, e.projects, i.incurred_hours,
                    poe.real_total AS poe_real, poe.future_total AS poe_future,
+                   poe.last_real, poe.first_forecast,
                    (SELECT snapshot_date FROM latest) AS erp_date
             FROM unnest(%s::text[]) AS d(code)
             LEFT JOIN eac e ON e.code=d.code
@@ -368,10 +375,18 @@ def render_director_bars(data, sources):
         return
     st.subheader("EAC vs POE vs Incurrido OF por director")
     erp_date = sources[0].get("erp_date") if sources else None
-    st.caption("POE: real histórico completo (verde lima) + previsto posterior "
-               "al último mes real (gris claro), sin límite de año. "
-               + (f"Incurrido OF: CT 422 · {erp_date:%d/%m/%Y}."
-                  if erp_date else "Sin snapshot OF del CT 422."))
+    def months(field):
+        dates = sorted({row[field] for row in sources if row.get(field) is not None})
+        if not dates:
+            return "sin datos"
+        fmt = lambda day: f"{MONTHS[day.month-1]}/{day.year}"
+        return fmt(dates[0]) if len(dates) == 1 else f"{fmt(dates[0])}–{fmt(dates[-1])}"
+    st.caption(f"POE real completo (hasta {months('last_real')}); "
+               f"POE previsto completo (desde {months('first_forecast')}); "
+               f"Incurrido OFs ({erp_date:%d/%m/%Y})" if erp_date else
+               f"POE real completo (hasta {months('last_real')}); "
+               f"POE previsto completo (desde {months('first_forecast')}); "
+               "Incurrido OFs (sin datos)")
     eac_chart(frame, "management_group", metrics={
         "etc_hours": "EAC", "poe_real": "POE real",
         "poe_future": "POE previsto", "hours_incurred": "Incurrido OF",
@@ -445,14 +460,23 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
                    if eac_total is not None and eac_total > 0 else [None] * 12)
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
                              mode="lines+markers", connectgaps=False,
-                             line=dict(color=GDELS_BLUE, width=3)))
+                             line=dict(color=POE_BLUE, width=3)))
     # Render labels in the final trace so no curve or marker covers them.
     if eac_total is not None and eac_total > 0:
         fig.add_trace(go.Scatter(
             x=MONTHS, y=actual, name="Porcentaje incurrido",
             mode="text", text=[f"<b>{p}</b>" if p is not None else None
                                for p in percentages],
-            textposition="top center", textfont=dict(size=15, color=GDELS_BLUE),
+            textposition="top center", textfont=dict(size=15, color=POE_BLUE),
+            cliponaxis=False, showlegend=False, hoverinfo="skip"))
+    # EAC label is added last to overlay the lines and percentage labels.
+    if eac_total is not None:
+        fig.add_trace(go.Scatter(
+            x=[MONTHS[-2]], y=[eac_total], mode="text",
+            name="Etiqueta EAC",
+            text=[f"<b>EAC={eac_total:,.0f}</b>".replace(",", ".")],
+            textposition="top right",
+            textfont=dict(size=15, color=EAC_ORANGE),
             cliponaxis=False, showlegend=False, hoverinfo="skip"))
     values = ([float(reference["eac_hours"])]
               if reference and reference["eac_hours"] is not None else [])
@@ -464,7 +488,7 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
                       yaxis=dict(range=[0, upper], fixedrange=True),
                       dragmode=False,
                       legend=dict(orientation="h",y=-0.2),hovermode="x unified")
-    st.subheader(f"Evolución {year} · {code} {data['directors'][code]}")
+    st.subheader(f"POE {year} - {code} {data['directors'][code]}")
     st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}",
                     config={"displayModeBar": False, "scrollZoom": False,
                             "doubleClick": False})
@@ -639,22 +663,18 @@ def render(url):
             st.info("Sin datos para la comparativa de directores.")
 
         st.subheader("POE mensual")
-        a, b = st.columns([2, 2])
         if state.get("poe_v5_year_anchor") != year:
             state["poe_v5_read_year_v2"] = year
             state["poe_v5_year_anchor"] = year
-        selected_year = a.number_input("Año", min_value=2000, max_value=2199,
-                                       value=year, step=1, key="poe_v5_read_year_v2")
+        selected_year = st.number_input("Año", min_value=2000, max_value=2199,
+                                        value=year, step=1, key="poe_v5_read_year_v2")
         if int(selected_year) != year:
             state["poe_v5_period"] = date(int(selected_year), 1, 1)
-            st.rerun()
-        if b.button("Abrir modo edición", type="primary"):
-            state["poe_v5_editing"] = True
             st.rerun()
         st.caption("Verde lima = real registrado (incluye cero). Sin fondo = previsto o vacío.")
         st.dataframe(style_annual(data, year), hide_index=True,
                      use_container_width=True)
-        refresh, sync = st.columns(2)
+        refresh, sync, edit = st.columns(3)
         if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
             state["poe_v5_cache"] = {}
             director_eac.clear()
@@ -670,6 +690,16 @@ def render(url):
                 st.rerun()
             except psycopg.Error as exc:
                 st.error(str(exc))
+        st.markdown(
+            '<style>.st-key-poe_v5_open_edit button {'
+            'background:#003087;color:white;border-color:#003087;}'
+            '.st-key-poe_v5_open_edit button:hover {'
+            'background:#003087;color:white;border-color:#003087;}</style>',
+            unsafe_allow_html=True,
+        )
+        if edit.button("Abrir modo edición", type="primary", key="poe_v5_open_edit"):
+            state["poe_v5_editing"] = True
+            st.rerun()
 
         st.subheader("Evolución anual por director")
         codes = [code for code in data["directors"]
