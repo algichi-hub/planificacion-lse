@@ -13,6 +13,10 @@ from eac_board import chart as eac_chart, list_snapshots
 MONTHS = ("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
           "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
 LIME = "#C5F27A"
+GDELS_BLUE = "#003087"
+EAC_ORANGE = "#F28C28"
+FORECAST_GRAY = "#89939B"
+FORECAST_LIGHT = "#E7E9EB"  # 20% of #89939B over white
 
 
 def connect(url):
@@ -243,8 +247,8 @@ def annual_frame(data, year):
     for code, name in data["directors"].items():
         if not data.get("visible", {}).get(code, True):
             continue
-        row = {"Director": name}
-        mask = {"Director": ""}
+        row = {"Código": code, "Director": name}
+        mask = {"Código": "", "Director": ""}
         for month, title in enumerate(MONTHS, 1):
             real, planned = data["hours"].get((code, date(year, month, 1)), (None, None))
             row[title] = float(real if real is not None else planned) \
@@ -252,8 +256,8 @@ def annual_frame(data, year):
             mask[title] = f"background-color: {LIME}; color: #20310A" if real is not None else ""
         values.append(row)
         masks.append(mask)
-    return pd.DataFrame(values, columns=["Director", *MONTHS]), \
-           pd.DataFrame(masks, columns=["Director", *MONTHS])
+    return pd.DataFrame(values, columns=["Código", "Director", *MONTHS]), \
+           pd.DataFrame(masks, columns=["Código", "Director", *MONTHS])
 
 
 def style_annual(data, year):
@@ -373,7 +377,7 @@ def render_director_bars(data, sources):
         "poe_future": "POE previsto", "hours_incurred": "Incurrido OF",
     }, palette={
         "EAC": "#D5A547", "POE real": LIME,
-        "POE previsto": "#D9DEE3", "Incurrido OF": "#1F4E8C",
+        "POE previsto": FORECAST_LIGHT, "Incurrido OF": "#1F4E8C",
     }, stack_groups={"POE real": "POE", "POE previsto": "POE",
                      "EAC": "EAC", "Incurrido OF": "OF"})
 
@@ -403,14 +407,16 @@ def annual_evolution(data, code, year):
     return actual, forecast, last_actual, gaps
 
 
-def render_annual_chart(url, data, year, snapshot_id, reference=None):
-    """Draw one director: the first visible row in the annual POE view."""
-    visible_codes = [c for c in data["directors"]
-                     if data.get("visible", {}).get(c, True)]
-    if not visible_codes:
-        st.info("No hay directores visibles para representar.")
+def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None):
+    """Draw only a selected visible director with monthly POE data for the year."""
+    if code is None or code not in data["directors"] or not data.get("visible", {}).get(code, True):
+        st.info("Sin datos")
         return
-    code = visible_codes[0]
+    if not any(any(v is not None for v in data["hours"].get(
+            (code, date(year, month, 1)), (None, None)))
+            for month in range(1, 13)):
+        st.info("Sin datos")
+        return
     if reference is None:
         try:
             reference = director_eac(url, code, snapshot_id)
@@ -428,10 +434,10 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
     if reference and reference["eac_hours"] is not None:
         fig.add_trace(go.Scatter(x=MONTHS, y=[float(reference["eac_hours"])] * 12,
                                  name="Límite EAC", mode="lines",
-                                 line=dict(color="#2E9D57", width=2, dash="dash")))
+                                 line=dict(color=EAC_ORANGE, width=2, dash="dash")))
     fig.add_trace(go.Scatter(x=MONTHS, y=forecast, name="Previsto acumulado",
                              mode="lines+markers", connectgaps=False,
-                             line=dict(color="#89939B", width=3)))
+                             line=dict(color=FORECAST_LIGHT, width=3, dash="dot")))
     eac_total = (float(reference["eac_hours"])
                  if reference and reference["eac_hours"] is not None else None)
     percentages = ([f"{value / eac_total:.1%}" if value is not None else None
@@ -439,14 +445,14 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
                    if eac_total is not None and eac_total > 0 else [None] * 12)
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
                              mode="lines+markers", connectgaps=False,
-                             line=dict(color="#198754", width=3)))
+                             line=dict(color=GDELS_BLUE, width=3)))
     # Render labels in the final trace so no curve or marker covers them.
     if eac_total is not None and eac_total > 0:
         fig.add_trace(go.Scatter(
             x=MONTHS, y=actual, name="Porcentaje incurrido",
             mode="text", text=[f"<b>{p}</b>" if p is not None else None
                                for p in percentages],
-            textposition="top center", textfont=dict(size=15, color="#198754"),
+            textposition="top center", textfont=dict(size=15, color=GDELS_BLUE),
             cliponaxis=False, showlegend=False, hoverinfo="skip"))
     values = ([float(reference["eac_hours"])]
               if reference and reference["eac_hours"] is not None else [])
@@ -458,7 +464,7 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
                       yaxis=dict(range=[0, upper], fixedrange=True),
                       dragmode=False,
                       legend=dict(orientation="h",y=-0.2),hovermode="x unified")
-    st.subheader(f"Evolución {year} · {data['directors'][code]}")
+    st.subheader(f"Evolución {year} · {code} {data['directors'][code]}")
     st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}",
                     config={"displayModeBar": False, "scrollZoom": False,
                             "doubleClick": False})
@@ -475,8 +481,6 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
 
 
 def render(url):
-    st.subheader("POE mensual")
-    st.caption("Horas reales y previstas manuales; lectura de directores EAC, sin modificar OF, bonos ni EAC.")
     state = st.session_state
     if "poe_v5_cache" not in state:
         state["poe_v5_cache"] = {}
@@ -550,6 +554,7 @@ def render(url):
                     with st.spinner("Guardando POE..."):
                         save_month(url, period, changes, v_changes)
                     update_local(data, period, changes, v_changes)
+                    director_bar_sources.clear()
                     # Visibility is global to each director, not specific to a year.
                     for other_year, other_data in cache.items():
                         if other_year != year:
@@ -602,8 +607,39 @@ def render(url):
                 state["poe_v5_busy"] = False
             st.warning("La edición permanece abierta y los cambios no se han descartado.")
     else:
+        st.subheader("EAC representado")
+        try:
+            snapshots = available_eac_snapshots(url)
+        except psycopg.Error as exc:
+            st.warning(f"No se pueden leer los snapshots EAC: {type(exc).__name__}")
+            snapshots = pd.DataFrame()
+        sources = []
+        selected_eac = None
+        if snapshots.empty:
+            st.info("Sin snapshots EAC.")
+        else:
+            choices = {int(x.id): f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
+                       for x in snapshots.itertuples(index=False)}
+            selected_eac = st.selectbox(
+                "Snapshot EAC", list(choices), index=0,
+                format_func=lambda value: choices[value],
+                label_visibility="collapsed", key="poe_v5_chart_eac_snapshot",
+            )
+            codes = tuple(code for code in data["directors"]
+                          if data.get("visible", {}).get(code, True))
+            if codes:
+                try:
+                    sources = director_bar_sources(url, selected_eac, codes)
+                except psycopg.Error as exc:
+                    st.warning(f"No se pudo leer la comparativa EAC/OF: {type(exc).__name__}")
+
+        if sources:
+            render_director_bars(data, sources)
+        else:
+            st.info("Sin datos para la comparativa de directores.")
+
+        st.subheader("POE mensual")
         a, b = st.columns([2, 2])
-        # Reconcile only on external year transitions; never overwrite a user's year choice.
         if state.get("poe_v5_year_anchor") != year:
             state["poe_v5_read_year_v2"] = year
             state["poe_v5_year_anchor"] = year
@@ -629,43 +665,39 @@ def render(url):
             try:
                 added = sync_directors(url)
                 state["poe_v5_cache"] = {}
+                director_bar_sources.clear()
                 st.toast(f"{len(added)} directores nuevos incorporados.")
                 st.rerun()
             except psycopg.Error as exc:
                 st.error(str(exc))
 
-        # EAC catalog shares the source and descending order of the EAC board.
-        try:
-            snapshots = available_eac_snapshots(url)
-        except psycopg.Error as exc:
-            st.warning(f"No se pueden leer los snapshots EAC: {type(exc).__name__}")
-            snapshots = pd.DataFrame()
-        if snapshots.empty:
-            st.warning("No hay snapshots EAC disponibles para la gráfica.")
-        else:
-            choices = {int(x.id): f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
-                       for x in snapshots.itertuples(index=False)}
-            selected_eac = st.selectbox("Snapshot EAC para la gráfica", list(choices),
-                                        index=0, format_func=lambda v: choices[v],
-                                        key="poe_v5_chart_eac_snapshot")
-            # One cached grouped query serves both charts; POE hours remain local.
-            codes = tuple(code for code in data["directors"]
-                          if data.get("visible", {}).get(code, True))
-            if codes:
-                try:
-                    sources = director_bar_sources(url, selected_eac, codes)
-                except psycopg.Error as exc:
-                    st.warning(f"No se pudo leer la comparativa EAC/OF: {type(exc).__name__}")
-                    sources = []
-                if sources:
-                    render_director_bars(data, sources)
-                    first = next(r for r in sources if r["code"] == codes[0])
+        st.subheader("Evolución anual por director")
+        codes = [code for code in data["directors"]
+                 if data.get("visible", {}).get(code, True)]
+        if state.get("poe_v5_evolution_director") not in (None, *codes):
+            state["poe_v5_evolution_director"] = None
+        selected_director = st.selectbox(
+            "Director para evolución", codes, index=None,
+            placeholder="Seleccionar director",
+            format_func=lambda code: f"{code} · {data['directors'][code]}",
+            label_visibility="collapsed", key="poe_v5_evolution_director",
+        )
+        if selected_director is not None:
+            reference = None
+            if selected_eac is not None and sources:
+                source = next((r for r in sources if r["code"] == selected_director), None)
+                if source is not None:
                     metadata = snapshots.loc[snapshots["id"] == selected_eac].iloc[0]
                     reference = {
-                        "year": int(metadata["year"]), "quarter": int(metadata["quarter"]),
-                        "eac_hours": first["eac_hours"],
-                        "projects": first["projects"] or 0,
+                        "year": int(metadata["year"]),
+                        "quarter": int(metadata["quarter"]),
+                        "eac_hours": source["eac_hours"],
+                        "projects": source["projects"] or 0,
                     }
-                    render_annual_chart(url, data, year, selected_eac, reference)
+            if selected_eac is not None and reference is not None:
+                render_annual_chart(url, data, year, selected_eac,
+                                    reference=reference, code=selected_director)
             else:
-                st.info("No hay directores visibles para representar.")
+                st.info("Sin datos")
+        else:
+            st.info("Selecciona un director para visualizar su evolución.")
