@@ -323,6 +323,11 @@ def director_bar_sources(url, snapshot_id, codes):
                 GROUP BY code
             ), poe_totals AS (
                 SELECT h.code,
+                       MAX(l.last_real) AS last_real,
+                       MIN(h.period) FILTER (
+                           WHERE h.planned_hours IS NOT NULL
+                             AND (l.last_real IS NULL OR h.period > l.last_real)
+                       ) AS first_forecast,
                        SUM(h.real_hours) AS real_total,
                        SUM(h.planned_hours) FILTER (
                            WHERE l.last_real IS NULL OR h.period > l.last_real
@@ -333,6 +338,7 @@ def director_bar_sources(url, snapshot_id, codes):
             )
             SELECT d.code, e.eac_hours, e.projects, i.incurred_hours,
                    poe.real_total AS poe_real, poe.future_total AS poe_future,
+                   poe.last_real, poe.first_forecast,
                    (SELECT snapshot_date FROM latest) AS erp_date
             FROM unnest(%s::text[]) AS d(code)
             LEFT JOIN eac e ON e.code=d.code
