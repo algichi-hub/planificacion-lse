@@ -14,6 +14,7 @@ MONTHS = ("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
           "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
 LIME = "#C5F27A"
 GDELS_BLUE = "#003087"
+POE_BLUE = "#2563EB"
 EAC_ORANGE = "#F28C28"
 FORECAST_GRAY = "#89939B"
 FORECAST_LIGHT = "#E7E9EB"  # 20% of #89939B over white
@@ -445,14 +446,23 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
                    if eac_total is not None and eac_total > 0 else [None] * 12)
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
                              mode="lines+markers", connectgaps=False,
-                             line=dict(color=GDELS_BLUE, width=3)))
+                             line=dict(color=POE_BLUE, width=3)))
     # Render labels in the final trace so no curve or marker covers them.
     if eac_total is not None and eac_total > 0:
         fig.add_trace(go.Scatter(
             x=MONTHS, y=actual, name="Porcentaje incurrido",
             mode="text", text=[f"<b>{p}</b>" if p is not None else None
                                for p in percentages],
-            textposition="top center", textfont=dict(size=15, color=GDELS_BLUE),
+            textposition="top center", textfont=dict(size=15, color=POE_BLUE),
+            cliponaxis=False, showlegend=False, hoverinfo="skip"))
+    # EAC label is added last to overlay the lines and percentage labels.
+    if eac_total is not None:
+        fig.add_trace(go.Scatter(
+            x=[MONTHS[-2]], y=[eac_total], mode="text",
+            name="Etiqueta EAC",
+            text=[f"<b>EAC={eac_total:,.0f}</b>".replace(",", ".")],
+            textposition="top right",
+            textfont=dict(size=15, color=EAC_ORANGE),
             cliponaxis=False, showlegend=False, hoverinfo="skip"))
     values = ([float(reference["eac_hours"])]
               if reference and reference["eac_hours"] is not None else [])
@@ -464,7 +474,7 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
                       yaxis=dict(range=[0, upper], fixedrange=True),
                       dragmode=False,
                       legend=dict(orientation="h",y=-0.2),hovermode="x unified")
-    st.subheader(f"Evolución {year} · {code} {data['directors'][code]}")
+    st.subheader(f"POE {year} - {code} {data['directors'][code]}")
     st.plotly_chart(fig, use_container_width=True, key=f"poe_chart_{year}_{code}",
                     config={"displayModeBar": False, "scrollZoom": False,
                             "doubleClick": False})
