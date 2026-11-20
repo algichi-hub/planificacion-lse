@@ -49,33 +49,41 @@ class POEV5Tests(unittest.TestCase):
 
     def test_annual_view_contains_all_twelve_natural_months(self):
         frame, _ = annual_frame(self.data(), date.today().year)
-        self.assertEqual(frame.columns.tolist(), ["Director", *MONTHS])
+        self.assertEqual(frame.columns.tolist(), ["Código", "Director", *MONTHS])
+        self.assertEqual(frame["Código"].tolist(), ["110040", "310008"])
         self.assertEqual(len(MONTHS), 12)
 
-    def test_refresh_and_sync_buttons_immediately_follow_poe_table(self):
+    def test_screen_sections_in_expected_order(self):
         source = inspect.getsource(render)
+        eac = source.index('st.subheader("EAC representado")')
+        selector = source.index('st.selectbox(\n                "Snapshot EAC"')
+        bars = source.index('render_director_bars(data, sources)')
+        poe = source.index('st.subheader("POE mensual")')
         table = source.index("st.dataframe(style_annual(data, year)")
-        refresh = source.index('refresh, sync = st.columns(2)', table)
-        refresh_button = source.index('refresh.button("Actualizar POE"', refresh)
-        sync_button = source.index('sync.button("Sincronizar directores"', refresh)
-        selector = source.index('st.selectbox("Snapshot EAC para la gráfica"', table)
-        chart = source.index("render_director_bars(data, sources)", table)
-        self.assertLess(table, refresh)
-        self.assertLess(refresh, refresh_button)
-        self.assertLess(refresh_button, sync_button)
-        self.assertLess(sync_button, selector)
-        self.assertLess(selector, chart)
+        refresh = source.index('refresh.button("Actualizar POE"')
+        sync = source.index('sync.button("Sincronizar directores"')
+        evolution = source.index('st.subheader("Evolución anual por director")')
+        self.assertEqual(sorted([eac, selector, bars, poe, table, refresh, sync, evolution]),
+                         [eac, selector, bars, poe, table, refresh, sync, evolution])
+        self.assertNotIn("Horas reales y previstas manuales; lectura de directores", source)
+        self.assertIn('label_visibility="collapsed"', source)
         self.assertEqual(source.count('refresh.button("Actualizar POE"'), 1)
         self.assertEqual(source.count('sync.button("Sincronizar directores"'), 1)
 
-    def test_eac_selector_is_immediately_below_annual_table(self):
+    def test_lazy_evolution_selector_and_year_specific_data(self):
         source = inspect.getsource(render)
-        table = source.index("st.dataframe(style_annual(data, year)")
-        selector = source.index('st.selectbox("Snapshot EAC para la gráfica"')
-        chart = source.index("render_annual_chart(url, data, year, selected_eac, reference)")
-        self.assertLess(table, selector)
-        self.assertLess(selector, chart)
-        self.assertIn("index=0, format_func=lambda v: choices[v]", source)
+        self.assertIn('codes, index=None', source)
+        self.assertIn('key="poe_v5_evolution_director"', source)
+        self.assertIn('if selected_director is not None:', source)
+        self.assertIn('date(int(selected_year), 1, 1)', source)
+        self.assertIn('render_annual_chart(url, data, year, selected_eac,', source)
+        tree = ast.parse(inspect.getsource(render))
+        chart_calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                       and isinstance(n.func, ast.Name)
+                       and n.func.id == "render_annual_chart"]
+        self.assertEqual(len(chart_calls), 1)
+        kwargs = {k.arg: k.value for k in chart_calls[0].keywords}
+        self.assertEqual(kwargs["code"].id, "selected_director")
 
     def test_snapshots_catalog_reuses_eac_board_listing(self):
         frame = pd.DataFrame([
@@ -99,7 +107,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.plotly_chart") as chart, \
              patch("poe_board.st.subheader"), \
              patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2026, 9)
+            render_annual_chart("unused", data, 2026, 9, code="A")
         get_eac.assert_called_once_with("unused", "A", 9)
         figure = chart.call_args.args[0]
         real = next(trace for trace in figure.data if trace.name == "Incurrido real acumulado")
@@ -125,7 +133,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.plotly_chart") as chart, \
              patch("poe_board.st.subheader"), \
              patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2026, 1)
+            render_annual_chart("unused", data, 2026, 1, code="A")
         trace = next(trace for trace in chart.call_args.args[0].data
                      if trace.name == "Incurrido real acumulado")
         self.assertEqual(trace.mode, "lines+markers")
@@ -166,7 +174,7 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(list(kwargs["metrics"].values()),
                          ["EAC", "POE real", "POE previsto", "Incurrido OF"])
         self.assertEqual(kwargs["palette"]["POE real"], LIME)
-        self.assertEqual(kwargs["palette"]["POE previsto"], "#D9DEE3")
+        self.assertEqual(kwargs["palette"]["POE previsto"], "#E9EBEC")
         self.assertEqual(kwargs["stack_groups"]["POE real"], "POE")
         self.assertEqual(kwargs["stack_groups"]["POE previsto"], "POE")
         self.assertNotEqual(kwargs["stack_groups"]["EAC"], "POE")
@@ -240,9 +248,40 @@ class POEV5Tests(unittest.TestCase):
         with patch("poe_board.director_eac") as redundant, \
              patch("poe_board.st.plotly_chart") as plot, \
              patch("poe_board.st.subheader"), patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2026, 9, reference)
+            render_annual_chart("unused", data, 2026, 9, reference, code="A")
         redundant.assert_not_called()
         self.assertEqual(plot.call_args.args[0].data[0].y[0], 500)
+
+    def test_no_data_for_selected_year_skips_chart_and_database(self):
+        data = {"directors": {"A": "DIRECTOR"}, "visible": {"A": True},
+                "opening": {"A": Decimal(200)}, "opening_count": {"A": 1},
+                "hours": {("A", date(2025, 1, 1)): (Decimal(100), None)}}
+        with patch("poe_board.director_eac") as lookup, \
+             patch("poe_board.st.plotly_chart") as plot, \
+             patch("poe_board.st.info") as notice:
+            render_annual_chart("unused", data, 2026, 1, code="A")
+        lookup.assert_not_called()
+        plot.assert_not_called()
+        notice.assert_called_once_with("Sin datos")
+        annual, _ = annual_frame(data, 2026)
+        self.assertTrue(all(pd.isna(annual.iloc[0][m]) for m in MONTHS))
+
+    def test_evolution_colors_and_forecast_dotted(self):
+        data = {"directors": {"A": "DIRECTOR"}, "visible": {"A": True},
+                "opening": {"A": Decimal(200)}, "opening_count": {"A": 1},
+                "hours": {("A", date(2026, 1, 1)): (Decimal(100), Decimal(120))}}
+        ref = {"year": 2026, "quarter": 3, "eac_hours": Decimal(1000),
+               "projects": 1}
+        with patch("poe_board.st.plotly_chart") as plot, \
+             patch("poe_board.st.subheader"), patch("poe_board.st.caption"):
+            render_annual_chart("unused", data, 2026, 1, reference=ref, code="A")
+        traces = {t.name: t for t in plot.call_args.args[0].data}
+        self.assertEqual(traces["Límite EAC"].line.color, "#F28C28")
+        self.assertEqual(traces["Previsto acumulado"].line.color, "#E9EBEC")
+        self.assertEqual(traces["Previsto acumulado"].line.dash, "dot")
+        self.assertEqual(traces["Incurrido real acumulado"].line.color, "#003087")
+        self.assertEqual(traces["Porcentaje incurrido"].textfont.color, "#003087")
+        self.assertEqual(plot.call_args.args[0].layout.yaxis.range[0], 0)
 
     def test_2025_dragon_real_series_from_neon_and_no_forecast(self):
         data = {"directors": {"110040": "DRAGON"}, "visible": {"110040": True},
@@ -265,7 +304,7 @@ class POEV5Tests(unittest.TestCase):
                        and n.func.id == "render_annual_chart"]
         self.assertEqual(len(chart_calls), 1)
         self.assertEqual([a.id for a in chart_calls[0].args],
-                         ["url", "data", "year", "selected_eac", "reference"])
+                         ["url", "data", "year", "selected_eac"])
         # No additional year is loaded just to draw the plot.
         self.assertNotIn("chart_year", inspect.getsource(render))
 
@@ -280,7 +319,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.plotly_chart") as chart, \
              patch("poe_board.st.subheader"), \
              patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2025, 1)
+            render_annual_chart("unused", data, 2025, 1, code="110040")
         figure = chart.call_args.args[0]
         self.assertEqual(figure.layout.yaxis.range[0], 0)
         self.assertGreater(figure.layout.yaxis.range[1], 48526)
@@ -301,7 +340,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.subheader"), \
              patch("poe_board.st.warning"), \
              patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2025, 1)
+            render_annual_chart("unused", data, 2025, 1, code="110040")
         figure = chart.call_args.args[0]
         self.assertEqual(figure.layout.yaxis.range[0], 0)
         self.assertGreater(figure.layout.yaxis.range[1], 0)
@@ -367,7 +406,7 @@ class POEV5Tests(unittest.TestCase):
              patch("poe_board.st.subheader"), \
              patch("poe_board.st.warning"), \
              patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2026, 1)
+            render_annual_chart("unused", data, 2026, 1, code="A")
         figure = chart.call_args.args[0]
         planned_trace = next(t for t in figure.data if t.name == "Previsto acumulado")
         real_trace = next(t for t in figure.data if t.name == "Incurrido real acumulado")
@@ -445,7 +484,7 @@ class POEV5Tests(unittest.TestCase):
         self.assertIn(LIME, colors.loc[0, "NOV"])
         self.assertEqual(colors.loc[1, "NOV"], "")
         self.assertTrue(pd.isna(frame.loc[0, "ENE"]))
-        self.assertEqual(len(frame.columns), 13)
+        self.assertEqual(len(frame.columns), 14)
         self.assertEqual(len(style_annual(self.data(), 2026).to_html()) > 0, True)
 
     def test_no_data_not_converted_to_zero(self):
