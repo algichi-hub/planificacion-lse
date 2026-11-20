@@ -375,10 +375,18 @@ def render_director_bars(data, sources):
         return
     st.subheader("EAC vs POE vs Incurrido OF por director")
     erp_date = sources[0].get("erp_date") if sources else None
-    st.caption("POE: real histórico completo (verde lima) + previsto posterior "
-               "al último mes real (gris claro), sin límite de año. "
-               + (f"Incurrido OF: CT 422 · {erp_date:%d/%m/%Y}."
-                  if erp_date else "Sin snapshot OF del CT 422."))
+    def months(field):
+        dates = sorted({row[field] for row in sources if row.get(field) is not None})
+        if not dates:
+            return "sin datos"
+        fmt = lambda day: f"{MONTHS[day.month-1]}/{day.year}"
+        return fmt(dates[0]) if len(dates) == 1 else f"{fmt(dates[0])}–{fmt(dates[-1])}"
+    st.caption(f"POE real completo (hasta {months('last_real')}); "
+               f"POE previsto completo (desde {months('first_forecast')}); "
+               f"Incurrido OFs ({erp_date:%d/%m/%Y})" if erp_date else
+               f"POE real completo (hasta {months('last_real')}); "
+               f"POE previsto completo (desde {months('first_forecast')}); "
+               "Incurrido OFs (sin datos)")
     eac_chart(frame, "management_group", metrics={
         "etc_hours": "EAC", "poe_real": "POE real",
         "poe_future": "POE previsto", "hours_incurred": "Incurrido OF",
@@ -655,22 +663,18 @@ def render(url):
             st.info("Sin datos para la comparativa de directores.")
 
         st.subheader("POE mensual")
-        a, b = st.columns([2, 2])
         if state.get("poe_v5_year_anchor") != year:
             state["poe_v5_read_year_v2"] = year
             state["poe_v5_year_anchor"] = year
-        selected_year = a.number_input("Año", min_value=2000, max_value=2199,
-                                       value=year, step=1, key="poe_v5_read_year_v2")
+        selected_year = st.number_input("Año", min_value=2000, max_value=2199,
+                                        value=year, step=1, key="poe_v5_read_year_v2")
         if int(selected_year) != year:
             state["poe_v5_period"] = date(int(selected_year), 1, 1)
-            st.rerun()
-        if b.button("Abrir modo edición", type="primary"):
-            state["poe_v5_editing"] = True
             st.rerun()
         st.caption("Verde lima = real registrado (incluye cero). Sin fondo = previsto o vacío.")
         st.dataframe(style_annual(data, year), hide_index=True,
                      use_container_width=True)
-        refresh, sync = st.columns(2)
+        refresh, sync, edit = st.columns(3)
         if refresh.button("Actualizar POE", help="Recargar las horas y visibilidad desde Neon."):
             state["poe_v5_cache"] = {}
             director_eac.clear()
@@ -686,6 +690,16 @@ def render(url):
                 st.rerun()
             except psycopg.Error as exc:
                 st.error(str(exc))
+        st.markdown(
+            '<style>.st-key-poe_v5_open_edit button {'
+            'background:#003087;color:white;border-color:#003087;}'
+            '.st-key-poe_v5_open_edit button:hover {'
+            'background:#003087;color:white;border-color:#003087;}</style>',
+            unsafe_allow_html=True,
+        )
+        if edit.button("Abrir modo edición", type="primary", key="poe_v5_open_edit"):
+            state["poe_v5_editing"] = True
+            st.rerun()
 
         st.subheader("Evolución anual por director")
         codes = [code for code in data["directors"]
