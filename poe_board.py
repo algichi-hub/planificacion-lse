@@ -607,8 +607,39 @@ def render(url):
                 state["poe_v5_busy"] = False
             st.warning("La edición permanece abierta y los cambios no se han descartado.")
     else:
+        st.subheader("EAC representado")
+        try:
+            snapshots = available_eac_snapshots(url)
+        except psycopg.Error as exc:
+            st.warning(f"No se pueden leer los snapshots EAC: {type(exc).__name__}")
+            snapshots = pd.DataFrame()
+        sources = []
+        selected_eac = None
+        if snapshots.empty:
+            st.info("Sin snapshots EAC.")
+        else:
+            choices = {int(x.id): f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
+                       for x in snapshots.itertuples(index=False)}
+            selected_eac = st.selectbox(
+                "Snapshot EAC", list(choices), index=0,
+                format_func=lambda value: choices[value],
+                label_visibility="collapsed", key="poe_v5_chart_eac_snapshot",
+            )
+            codes = tuple(code for code in data["directors"]
+                          if data.get("visible", {}).get(code, True))
+            if codes:
+                try:
+                    sources = director_bar_sources(url, selected_eac, codes)
+                except psycopg.Error as exc:
+                    st.warning(f"No se pudo leer la comparativa EAC/OF: {type(exc).__name__}")
+
+        if sources:
+            render_director_bars(data, sources)
+        else:
+            st.info("Sin datos para la comparativa de directores.")
+
+        st.subheader("POE mensual")
         a, b = st.columns([2, 2])
-        # Reconcile only on external year transitions; never overwrite a user's year choice.
         if state.get("poe_v5_year_anchor") != year:
             state["poe_v5_read_year_v2"] = year
             state["poe_v5_year_anchor"] = year
@@ -634,43 +665,37 @@ def render(url):
             try:
                 added = sync_directors(url)
                 state["poe_v5_cache"] = {}
+                director_bar_sources.clear()
                 st.toast(f"{len(added)} directores nuevos incorporados.")
                 st.rerun()
             except psycopg.Error as exc:
                 st.error(str(exc))
 
-        # EAC catalog shares the source and descending order of the EAC board.
-        try:
-            snapshots = available_eac_snapshots(url)
-        except psycopg.Error as exc:
-            st.warning(f"No se pueden leer los snapshots EAC: {type(exc).__name__}")
-            snapshots = pd.DataFrame()
-        if snapshots.empty:
-            st.warning("No hay snapshots EAC disponibles para la gráfica.")
-        else:
-            choices = {int(x.id): f"{int(x.year)} · Q{int(x.quarter)} · {x.status}"
-                       for x in snapshots.itertuples(index=False)}
-            selected_eac = st.selectbox("Snapshot EAC para la gráfica", list(choices),
-                                        index=0, format_func=lambda v: choices[v],
-                                        key="poe_v5_chart_eac_snapshot")
-            # One cached grouped query serves both charts; POE hours remain local.
-            codes = tuple(code for code in data["directors"]
-                          if data.get("visible", {}).get(code, True))
-            if codes:
-                try:
-                    sources = director_bar_sources(url, selected_eac, codes)
-                except psycopg.Error as exc:
-                    st.warning(f"No se pudo leer la comparativa EAC/OF: {type(exc).__name__}")
-                    sources = []
-                if sources:
-                    render_director_bars(data, sources)
-                    first = next(r for r in sources if r["code"] == codes[0])
+        st.subheader("Evolución anual por director")
+        codes = [code for code in data["directors"]
+                 if data.get("visible", {}).get(code, True)]
+        selected_director = st.selectbox(
+            "Director para evolución", codes, index=None,
+            placeholder="Seleccionar director",
+            format_func=lambda code: f"{code} · {data['directors'][code]}",
+            label_visibility="collapsed", key="poe_v5_evolution_director",
+        )
+        if selected_director is not None:
+            reference = None
+            if selected_eac is not None and sources:
+                source = next((r for r in sources if r["code"] == selected_director), None)
+                if source is not None:
                     metadata = snapshots.loc[snapshots["id"] == selected_eac].iloc[0]
                     reference = {
-                        "year": int(metadata["year"]), "quarter": int(metadata["quarter"]),
-                        "eac_hours": first["eac_hours"],
-                        "projects": first["projects"] or 0,
+                        "year": int(metadata["year"]),
+                        "quarter": int(metadata["quarter"]),
+                        "eac_hours": source["eac_hours"],
+                        "projects": source["projects"] or 0,
                     }
-                    render_annual_chart(url, data, year, selected_eac, reference)
+            if selected_eac is not None and reference is not None:
+                render_annual_chart(url, data, year, selected_eac,
+                                    reference=reference, code=selected_director)
             else:
-                st.info("No hay directores visibles para representar.")
+                st.info("Sin datos")
+        else:
+            st.info("Selecciona un director para visualizar su evolución.")
