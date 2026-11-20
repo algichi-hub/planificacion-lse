@@ -13,6 +13,10 @@ from eac_board import chart as eac_chart, list_snapshots
 MONTHS = ("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
           "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
 LIME = "#C5F27A"
+GDELS_BLUE = "#003087"
+EAC_ORANGE = "#F28C28"
+FORECAST_GRAY = "#89939B"
+FORECAST_LIGHT = "#E9EBEC"  # 20% of grey over white
 
 
 def connect(url):
@@ -243,8 +247,8 @@ def annual_frame(data, year):
     for code, name in data["directors"].items():
         if not data.get("visible", {}).get(code, True):
             continue
-        row = {"Director": name}
-        mask = {"Director": ""}
+        row = {"Código": code, "Director": name}
+        mask = {"Código": "", "Director": ""}
         for month, title in enumerate(MONTHS, 1):
             real, planned = data["hours"].get((code, date(year, month, 1)), (None, None))
             row[title] = float(real if real is not None else planned) \
@@ -252,8 +256,8 @@ def annual_frame(data, year):
             mask[title] = f"background-color: {LIME}; color: #20310A" if real is not None else ""
         values.append(row)
         masks.append(mask)
-    return pd.DataFrame(values, columns=["Director", *MONTHS]), \
-           pd.DataFrame(masks, columns=["Director", *MONTHS])
+    return pd.DataFrame(values, columns=["Código", "Director", *MONTHS]), \
+           pd.DataFrame(masks, columns=["Código", "Director", *MONTHS])
 
 
 def style_annual(data, year):
@@ -373,7 +377,7 @@ def render_director_bars(data, sources):
         "poe_future": "POE previsto", "hours_incurred": "Incurrido OF",
     }, palette={
         "EAC": "#D5A547", "POE real": LIME,
-        "POE previsto": "#D9DEE3", "Incurrido OF": "#1F4E8C",
+        "POE previsto": FORECAST_LIGHT, "Incurrido OF": "#1F4E8C",
     }, stack_groups={"POE real": "POE", "POE previsto": "POE",
                      "EAC": "EAC", "Incurrido OF": "OF"})
 
@@ -428,10 +432,10 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
     if reference and reference["eac_hours"] is not None:
         fig.add_trace(go.Scatter(x=MONTHS, y=[float(reference["eac_hours"])] * 12,
                                  name="Límite EAC", mode="lines",
-                                 line=dict(color="#2E9D57", width=2, dash="dash")))
+                                 line=dict(color=EAC_ORANGE, width=2, dash="dash")))
     fig.add_trace(go.Scatter(x=MONTHS, y=forecast, name="Previsto acumulado",
                              mode="lines+markers", connectgaps=False,
-                             line=dict(color="#89939B", width=3)))
+                             line=dict(color=FORECAST_LIGHT, width=3, dash="dot")))
     eac_total = (float(reference["eac_hours"])
                  if reference and reference["eac_hours"] is not None else None)
     percentages = ([f"{value / eac_total:.1%}" if value is not None else None
@@ -439,14 +443,14 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
                    if eac_total is not None and eac_total > 0 else [None] * 12)
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="Incurrido real acumulado",
                              mode="lines+markers", connectgaps=False,
-                             line=dict(color="#198754", width=3)))
+                             line=dict(color=GDELS_BLUE, width=3)))
     # Render labels in the final trace so no curve or marker covers them.
     if eac_total is not None and eac_total > 0:
         fig.add_trace(go.Scatter(
             x=MONTHS, y=actual, name="Porcentaje incurrido",
             mode="text", text=[f"<b>{p}</b>" if p is not None else None
                                for p in percentages],
-            textposition="top center", textfont=dict(size=15, color="#198754"),
+            textposition="top center", textfont=dict(size=15, color=GDELS_BLUE),
             cliponaxis=False, showlegend=False, hoverinfo="skip"))
     values = ([float(reference["eac_hours"])]
               if reference and reference["eac_hours"] is not None else [])
@@ -475,8 +479,6 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None):
 
 
 def render(url):
-    st.subheader("POE mensual")
-    st.caption("Horas reales y previstas manuales; lectura de directores EAC, sin modificar OF, bonos ni EAC.")
     state = st.session_state
     if "poe_v5_cache" not in state:
         state["poe_v5_cache"] = {}
@@ -550,6 +552,7 @@ def render(url):
                     with st.spinner("Guardando POE..."):
                         save_month(url, period, changes, v_changes)
                     update_local(data, period, changes, v_changes)
+                    director_bar_sources.clear()
                     # Visibility is global to each director, not specific to a year.
                     for other_year, other_data in cache.items():
                         if other_year != year:
