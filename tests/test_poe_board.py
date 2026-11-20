@@ -331,19 +331,17 @@ class POEV5Tests(unittest.TestCase):
                          {"displayModeBar": False, "scrollZoom": False,
                           "doubleClick": False})
 
-    def test_empty_chart_still_starts_at_zero(self):
+    def test_empty_chart_shows_no_data_without_query_or_plot(self):
         data = {"directors": {"A": "DIRECTOR"}, "visible": {"A": True},
                 "opening": {"A": None}, "opening_count": {"A": 0},
                 "hours": {}}
-        with patch("poe_board.director_eac", return_value=None), \
+        with patch("poe_board.director_eac") as eac, \
              patch("poe_board.st.plotly_chart") as chart, \
-             patch("poe_board.st.subheader"), \
-             patch("poe_board.st.warning"), \
-             patch("poe_board.st.caption"):
-            render_annual_chart("unused", data, 2025, 1, code="110040")
-        figure = chart.call_args.args[0]
-        self.assertEqual(figure.layout.yaxis.range[0], 0)
-        self.assertGreater(figure.layout.yaxis.range[1], 0)
+             patch("poe_board.st.info") as info:
+            render_annual_chart("unused", data, 2025, 1, code="A")
+        eac.assert_not_called()
+        chart.assert_not_called()
+        info.assert_called_once_with("Sin datos")
 
     def test_chart_omits_vertical_axis_title(self):
         tree = ast.parse(inspect.getsource(render_annual_chart))
