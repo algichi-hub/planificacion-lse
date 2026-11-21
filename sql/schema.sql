@@ -140,3 +140,34 @@ CREATE TABLE IF NOT EXISTS bonus_descriptions (
     source_file_hash TEXT NOT NULL,
     PRIMARY KEY (snapshot_date, bonus_id)
 );
+
+
+-- Persistent, incremental mapping: operation/bonus -> work center.
+CREATE TABLE IF NOT EXISTS bonus_ct_registry (
+    bonus_id TEXT PRIMARY KEY CHECK (bonus_id ~ '^[0-9]{10}$'),
+    order_number TEXT NOT NULL,
+    work_center TEXT NOT NULL,
+    first_seen_snapshot DATE NOT NULL,
+    last_seen_snapshot DATE NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bonus_ct_registry_order ON bonus_ct_registry (order_number);
+
+-- One final incurred-hours amount per closed OF, never per bonus.
+-- Unknown and multicenter OF remain unallocated (NULL work_center).
+CREATE TABLE IF NOT EXISTS closed_of_hours (
+    snapshot_date DATE NOT NULL,
+    order_number TEXT NOT NULL,
+    hours_incurred NUMERIC(18,4) NOT NULL,
+    project_code TEXT,
+    work_center TEXT,
+    attribution_status TEXT NOT NULL
+        CHECK (attribution_status IN ('single_ct', 'unknown_ct', 'multi_ct')),
+    source_file_hash TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, order_number)
+);
+CREATE INDEX IF NOT EXISTS idx_closed_of_hours_ct
+    ON closed_of_hours (snapshot_date, work_center);
+CREATE OR REPLACE VIEW v_closed_of_hours AS
+SELECT snapshot_date, order_number, project_code, work_center,
+       hours_incurred, attribution_status
+FROM closed_of_hours;
