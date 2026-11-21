@@ -51,6 +51,14 @@ class ReportingContractTests(unittest.TestCase):
         self.assertNotIn("is_closed", risk)
         self.assertIn("FROM fact_hours f", risk)
 
+    def test_closed_of_status_is_normalized_only_for_home_presentation(self):
+        app = source("app.py")
+        self.assertIn('orders.loc[orders["is_closed"], "order_status"] = "Cerrada"', app)
+        self.assertIn('"order_status", "hours_granted", "hours_incurred"', app)
+        schema = source("sql/schema.sql")
+        self.assertIn("'Cerrad'::TEXT AS order_status", schema)
+        self.assertIn("FROM fact_hours f", app)
+
     def test_eac_poe_incurred_use_of_grain(self):
         self.assertIn("FROM v_reporting_of_hours f", source("eac_board.py"))
         self.assertIn("FROM v_reporting_of_hours f", source("poe_board.py"))
