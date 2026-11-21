@@ -1,8 +1,9 @@
 param(
     [string]$Ct,
-    [string]$HoursFile = "data/OOFF_OP_Planif_Terminada.txt",
-    [string]$ProjectsFile = "data/Proyectos_Sevilla.csv",
-    [string]$OoffTextoFile = "data/ooff_texto.csv",
+    [string]$HoursFile = "entrada/OOFF_OP_Planif_Terminada.txt",
+    [string]$ProjectsFile = "entrada/Proyectos_Sevilla.csv",
+    [string]$OoffTextoFile = "entrada/ooff_texto.csv",
+    [string]$ClosedFile = "entrada/OOFFCerradasMO.txt",
     [string]$OutputFile = "data/ooff_texto_consolidado.zip",
     [string]$SnapshotDate = (Get-Date -Format "yyyy-MM-dd"),
     [switch]$Help
@@ -19,14 +20,15 @@ USO:
 
 PARÁMETROS:
   -Ct             Centro de trabajo obligatorio salvo con -Help (ej. 422).
-  -HoursFile      Origen horas; data/OOFF_OP_Planif_Terminada.txt.
-  -ProjectsFile   Maestro; data/Proyectos_Sevilla.csv.
-  -OoffTextoFile  Textos ERP; data/ooff_texto.csv.
+  -HoursFile      Origen horas; entrada/OOFF_OP_Planif_Terminada.txt.
+  -ProjectsFile   Maestro; entrada/Proyectos_Sevilla.csv.
+  -OoffTextoFile  Textos ERP; entrada/ooff_texto.csv.
+  -ClosedFile     OF cerradas; entrada/OOFFCerradasMO.txt.
   -OutputFile     ZIP generado; data/ooff_texto_consolidado.zip.
   -SnapshotDate   Fecha de preparación, por defecto hoy (yyyy-MM-dd).
   -Help           Muestra esta ayuda y termina sin procesar archivos.
 
-SALIDA: JSON de cada OF del Ct, indice_of.csv, indice_bonos.csv y manifiesto.json.
+SALIDA: JSON de cada OF del Ct, indices OF/bono y los nuevos indices bono-Ct/cierres.
 No interpreta descripciones ni escribe en Neon.
 Más información: docs/SNAPSHOT_WORKFLOW.md.
 '@ | Write-Host
@@ -44,12 +46,13 @@ function Resolve-ProjectPath([string]$candidate) {
 $hours = Resolve-ProjectPath $HoursFile
 $projects = Resolve-ProjectPath $ProjectsFile
 $source = Resolve-ProjectPath $OoffTextoFile
+$closed = Resolve-ProjectPath $ClosedFile
 $output = Resolve-ProjectPath $OutputFile
-foreach ($file in @($hours, $projects, $source)) {
+foreach ($file in @($hours, $projects, $source, $closed)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "No existe entrada: $file" }
 }
 $python = Join-Path $scriptDir "prepare_snapshot.py"
-& python $python --ct $Ct --hours $hours --projects $projects --ooff-texto $source --output $output --snapshot-date $SnapshotDate
+& python $python --ct $Ct --hours $hours --projects $projects --ooff-texto $source --closed $closed --output $output --snapshot-date $SnapshotDate
 if ($LASTEXITCODE -ne 0) { throw "Error en pre_snapshot.py. No se ha generado salida válida." }
 Write-Host "Preparación finalizada: $output (Ct. $Ct)" -ForegroundColor Green
 Write-Host "No se ha modificado Neon."
