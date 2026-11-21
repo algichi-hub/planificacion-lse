@@ -117,8 +117,10 @@ def reopen(url, snapshot_id):
 def operational_hours(url, on_date):
     with connection(url) as conn:
         return pd.DataFrame(conn.execute(
-            "SELECT f.project_code, SUM(f.hours_granted) AS hours_granted,"
-            "SUM(f.hours_incurred) AS hours_incurred FROM fact_hours f "
+            "SELECT f.project_code, "
+            "CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 "
+            "THEN NULL ELSE SUM(f.hours_granted) END AS hours_granted,"
+            "SUM(f.hours_incurred) AS hours_incurred FROM v_reporting_of_hours f "
             "WHERE f.snapshot_date=%s GROUP BY f.project_code", (on_date,)
         ).fetchall())
 
@@ -264,8 +266,8 @@ def render(url):
     st.subheader("EAC por director")
     st.caption(f"EAC {eac_period} · Reales {real_date:%d/%m/%Y}.")
     joined = original.merge(facts, on="project_code", how="left")
-    for column in ("hours_granted", "hours_incurred"):
-        joined[column] = pd.to_numeric(joined[column], errors="coerce").fillna(0)
+    joined["hours_granted"] = pd.to_numeric(joined["hours_granted"], errors="coerce")
+    joined["hours_incurred"] = pd.to_numeric(joined["hours_incurred"], errors="coerce").fillna(0)
     joined["etc_hours"] = pd.to_numeric(joined["etc_hours"], errors="coerce")
 
     # El resumen completo de directores es independiente del filtro de proyectos.
@@ -273,7 +275,7 @@ def render(url):
         joined.groupby("management_group", as_index=False)
         .agg(
             etc_hours=("etc_hours", lambda x: x.sum(min_count=1)),
-            hours_granted=("hours_granted", "sum"),
+            hours_granted=("hours_granted", lambda x: x.sum(min_count=len(x))),
             hours_incurred=("hours_incurred", "sum"),
         )
         .sort_values("management_group")
