@@ -1,0 +1,17 @@
+name: Pre-snapshot regression
+on:
+  push:
+    branches: [feature/closed-of-importer]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax verification
+        run: python -m compileall -q scripts/prepare_snapshot.py scripts/consolidar_ooff_texto.py tests/test_pre_snapshot_closed.py
+      - name: Pre-snapshot tests (offline)
+        run: python -m unittest discover -s tests -p test_pre_snapshot_closed.py -v
