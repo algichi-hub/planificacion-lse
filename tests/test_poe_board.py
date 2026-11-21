@@ -47,6 +47,22 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(values["value"].id, "year")
         self.assertNotEqual(values["value"].id, "min_value")
 
+    def test_edit_grid_shows_immutable_director_code(self):
+        frame = month_frame(self.data(), date(2026, 11, 1))
+        self.assertEqual(frame["Código"].tolist(), ["110040", "310008"])
+        self.assertEqual(frame.columns.tolist(),
+                         ["Visible", "Código", "Director", "Real (h)", "Previsto (h)"])
+        edited = frame.copy()
+        edited.loc[0, "Real (h)"] = 12.0
+        self.assertEqual(month_changes(self.data(), date(2026, 11, 1), edited)[0][0],
+                         "110040")
+        edited.loc[0, "Código"] = "IMPOSTOR"
+        with self.assertRaisesRegex(ValueError, "orden de directores"):
+            month_changes(self.data(), date(2026, 11, 1), edited)
+        code = inspect.getsource(render)
+        self.assertIn('disabled=["Código", "Director"]', code)
+        self.assertIn('st.column_config.TextColumn("Código", width="small")', code)
+
     def test_annual_view_contains_all_twelve_natural_months(self):
         frame, _ = annual_frame(self.data(), date.today().year)
         self.assertEqual(frame.columns.tolist(), ["Código", "Director", *MONTHS])
