@@ -7,3 +7,6 @@ data/*.csv
 data/*.xlsx
 .streamlit/secrets.toml
 data/*.zip
+
+# Raw ERP exports (never commit)
+entrada/
