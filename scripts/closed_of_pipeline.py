@@ -89,8 +89,14 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
         for row in closed_rows:
             cp.write_row((row["OF numero"], Decimal(row["H_INV_TOT_"])))
 
-    # The closed file is a complete export, not a delta. Replace the selected
-    # snapshot's closed-OF set atomically, leaving all older snapshots untouched.
+    # A snapshot can be retried with the same source, but must never be silently
+    # overwritten with a different closed-OF export.
+    previous = cur.execute(
+        "SELECT source_file_hash FROM closed_of_hours WHERE snapshot_date = %s LIMIT 1",
+        (snapshot,),
+    ).fetchone()
+    if previous and previous[0] != closed_hash:
+        raise ValueError("El snapshot ya tiene cierres de otro fichero: usa otra fecha o conciliación manual")
     cur.execute("DELETE FROM closed_of_hours WHERE snapshot_date = %s", (snapshot,))
     cur.execute("""
         INSERT INTO closed_of_hours
