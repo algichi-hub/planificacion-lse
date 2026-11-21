@@ -267,7 +267,7 @@ center_placeholders = ",".join(["%s"] * len(selected_centers))
 managers = query(
     f"""
     SELECT DISTINCT p.project_manager
-    FROM fact_hours f
+    FROM v_reporting_of_hours f
     LEFT JOIN projects p ON p.project_code = f.project_code
     WHERE f.snapshot_date = %s
       AND f.work_center IN ({center_placeholders})
@@ -294,7 +294,7 @@ manager_placeholders = ",".join(["%s"] * len(selected_managers))
 project_statuses = query(
     f"""
     SELECT DISTINCT p.status
-    FROM fact_hours f
+    FROM v_reporting_of_hours f
     LEFT JOIN projects p ON p.project_code = f.project_code
     WHERE f.snapshot_date = %s
       AND f.work_center IN ({center_placeholders})
@@ -610,13 +610,13 @@ projects = query(
         MAX(p.customer) AS customer,
         MAX(p.status) AS project_status,
         MAX(p.project_manager) AS project_manager,
-        SUM(f.hours_granted) AS hours_granted,
+        CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) END AS hours_granted,
         SUM(f.hours_incurred) AS hours_incurred,
-        SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
-        SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
-        CASE WHEN SUM(f.hours_granted)=0 THEN NULL
+        CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_incurred) - SUM(f.hours_granted) END AS deviation_hours,
+        CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) - SUM(f.hours_incurred) END AS remaining_hours,
+        CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 OR SUM(f.hours_granted)=0 THEN NULL
              ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
-    FROM fact_hours f
+    FROM v_reporting_of_hours f
     LEFT JOIN projects p ON p.project_code = f.project_code
     WHERE f.snapshot_date = %s
       AND f.work_center IN ({center_placeholders})
@@ -631,9 +631,9 @@ projects = query(
 all_projects = ["Todos"] + projects["project_code"].dropna().astype(str).tolist()
 filtered_projects = projects
 
-granted = float(filtered_projects["hours_granted"].sum())
+granted = float(filtered_projects["hours_granted"].sum()) if filtered_projects["hours_granted"].notna().all() else None
 incurred = float(filtered_projects["hours_incurred"].sum())
-deviation = incurred - granted
+deviation = incurred - granted if granted is not None else None
 consumption = (incurred / granted) if granted else None
 
 st.divider()
@@ -643,7 +643,7 @@ st.subheader("RESUMEN DIRECTORES")
 director_summary = (
     filtered_projects.groupby("project_manager", as_index=False, dropna=False)
     .agg(
-        hours_granted=("hours_granted", "sum"),
+        hours_granted=("hours_granted", lambda x: x.sum(min_count=len(x))),
         hours_incurred=("hours_incurred", "sum"),
         project_count=("project_code", "nunique"),
     )
@@ -660,7 +660,7 @@ director_summary["consumption_pct"] = (
 )
 
 d1, d2 = st.columns(2)
-d1.metric("Horas concedidas", f"{granted:,.1f} h")
+d1.metric("Horas concedidas", "—" if granted is None else f"{granted:,.1f} h")
 d2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
 
 director_chart = director_summary.melt(
@@ -871,15 +871,15 @@ orders = query(
     SELECT
         f.project_code,
         f.order_number,
-        COALESCE(MAX(od.of_detailed_description), 'Pendiente confirmar') AS order_description,
+        COALESCE(MAX(od.of_detailed_description), MAX(f.order_description), 'Pendiente confirmar') AS order_description,
         MAX(f.order_status) AS order_status,
-        SUM(f.hours_granted) AS hours_granted,
+        CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) END AS hours_granted,
         SUM(f.hours_incurred) AS hours_incurred,
-        SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
-        SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
-        CASE WHEN SUM(f.hours_granted)=0 THEN NULL
+        CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_incurred) - SUM(f.hours_granted) END AS deviation_hours,
+        CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) - SUM(f.hours_incurred) END AS remaining_hours,
+        CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 OR SUM(f.hours_granted)=0 THEN NULL
              ELSE SUM(f.hours_incurred)/SUM(f.hours_granted) END AS consumption_ratio
-    FROM fact_hours f
+    FROM v_reporting_of_hours f
     LEFT JOIN projects p ON p.project_code = f.project_code
     LEFT JOIN of_descriptions od ON od.snapshot_date = f.snapshot_date AND od.order_number = f.order_number
     WHERE f.snapshot_date = %s
@@ -895,20 +895,20 @@ orders = query(
 
 if selected_project != "Todos":
     st.divider()
-    of_granted = float(orders["hours_granted"].sum())
+    of_granted = float(orders["hours_granted"].sum()) if orders["hours_granted"].notna().all() else None
     of_incurred = float(orders["hours_incurred"].sum())
-    of_deviation = of_incurred - of_granted
+    of_deviation = of_incurred - of_granted if of_granted is not None else None
     of_consumption = (of_incurred / of_granted) if of_granted else None
 
     st.subheader("RESUMEN ORDEN DE FABRICACIÓN")
     of1, of2 = st.columns(2)
-    of1.metric("Horas concedidas", f"{of_granted:,.1f} h")
+    of1.metric("Horas concedidas", "—" if of_granted is None else f"{of_granted:,.1f} h")
     of2.metric("Consumo", "—" if of_consumption is None else f"{of_consumption:.1%}")
 
     order_chart = (
         orders[["order_number", "hours_granted", "hours_incurred"]]
         .groupby("order_number", as_index=False)[["hours_granted", "hours_incurred"]]
-        .sum()
+        .sum(min_count=1)
     )
     order_chart["order_number"] = order_chart["order_number"].astype("string")
     order_chart = order_chart.melt(
@@ -1056,6 +1056,9 @@ if selected_project != "Todos" and selected_order != "Todas":
         """,
         (snapshot, *selected_centers, *selected_managers, *selected_statuses, selected_project, selected_order),
     )
+    if bonuses.empty:
+        st.info("OF cerrada: no existe desglose confirmado de horas por bono. Las horas definitivas están contabilizadas a nivel de OF.")
+        st.stop()
     bonuses["consumption_pct"] = bonuses["consumption_ratio"] * 100
 
     all_bonuses = ["Todos"] + bonuses["bonus_id"].dropna().astype(str).drop_duplicates().tolist()
