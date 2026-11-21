@@ -12,7 +12,7 @@ import json
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from prepare_snapshot import select_of, check_projects
+from prepare_snapshot import select_of, check_projects, inspect_erp_sources
 
 OF_HEADERS=["OF numero","of_detailed_description"]
 BONUS_HEADERS=["Bono numero","bo_detailed_description"]
@@ -52,9 +52,13 @@ def check_csv(path: Path, headers: list[str]) -> dict[str,str]:
     return result
 
 def validate(hours: Path,projects: Path,of_csv: Path,bonus_csv: Path,ct: str,
-             prepared_zip:Path|None=None,snapshot_date:str|None=None) -> ValidatedSnapshot:
-    for p in (hours,projects,of_csv,bonus_csv):
+             prepared_zip:Path|None=None,snapshot_date:str|None=None,
+             closed_file:Path|None=None, source_file:Path|None=None) -> ValidatedSnapshot:
+    if closed_file is None or source_file is None or prepared_zip is None:
+        raise ValueError('Nueva importación: son obligatorios los cuatro ERP y el ZIP consolidado')
+    for p in (hours,projects,of_csv,bonus_csv,closed_file,source_file,prepared_zip):
         if not p.is_file(): raise FileNotFoundError(f"Entrada obligatoria ausente: {p}")
+    all_bonus_ct, all_closed = inspect_erp_sources(hours, closed_file)
     orders,op_map,project_codes,hours_rows=select_of(hours,ct)
     missing_projects=project_codes-check_projects(projects)-{""}
     if missing_projects:raise ValueError(f"Proyectos ausentes del maestro: {sorted(missing_projects)}")
@@ -75,16 +79,26 @@ def validate(hours: Path,projects: Path,of_csv: Path,bonus_csv: Path,ct: str,
             if snapshot_date and manifest["snapshot_date"]!=snapshot_date:
                 raise ValueError("Fecha del ZIP no coincide; vuelve a ejecutar pre_snapshot.ps1")
             hashes=manifest["source_files_sha256"]
-            for p in (hours,projects):
+            for p in (hours,projects,closed_file,source_file):
                 digest=hashlib.sha256(p.read_bytes()).hexdigest()
                 if hashes.get(p.name)!=digest:
                     raise ValueError(f"{p.name}: ha cambiado desde pre_snapshot.ps1")
-            if not {"indice_of.csv","indice_bonos.csv"}.issubset(z.namelist()):
-                raise ValueError("El ZIP consolidado debe incluir ambos índices")
+            if not {"indice_of.csv","indice_bonos.csv", "indice_bono_ct.csv", "indice_of_cerradas.csv"}.issubset(z.namelist()):
+                raise ValueError("Faltan índices obligatorios del nuevo ZIP consolidado")
+            if z.testzip() is not None:
+                raise ValueError("ZIP consolidado corrupto")
             idx_of=list(csv.DictReader(io.TextIOWrapper(z.open("indice_of.csv"),encoding="utf-8-sig"),delimiter=";"))
             idx_bonus=list(csv.DictReader(io.TextIOWrapper(z.open("indice_bonos.csv"),encoding="utf-8-sig"),delimiter=";"))
             if {r["order_number"] for r in idx_of}!=orders:
                 raise ValueError("El índice OF consolidado difiere del ERP")
-            if {r["Bono numero"] for r in idx_bonus}!=set(op_map):
+            if {r["Bono numero"] for r in idx_bonus}!=set(op_map) or len(idx_bonus)!=len(op_map):
                 raise ValueError("El índice de bonos consolidado difiere del ERP")
+            idx_registry=list(csv.DictReader(io.TextIOWrapper(z.open("indice_bono_ct.csv"),encoding="utf-8-sig"),delimiter=";"))
+            idx_closed=list(csv.DictReader(io.TextIOWrapper(z.open("indice_of_cerradas.csv"),encoding="utf-8-sig"),delimiter=";"))
+            if len(idx_registry)!=len(all_bonus_ct) or {r["Bono numero"]:r["Ct."] for r in idx_registry}!=all_bonus_ct:
+                raise ValueError("Índice bono-CT incompatible con el ERP actual")
+            if len(idx_closed)!=len(all_closed) or {r["OF numero"]:r["H_INV_TOT_"] for r in idx_closed}!=all_closed:
+                raise ValueError("Índice OF cerradas incompatible con el ERP actual")
+            if len(idx_of)!=len(orders):
+                raise ValueError("Índice OF con claves duplicadas")
     return ValidatedSnapshot(orders,set(op_map),project_codes,of_text,bonus_text,hours_rows)
