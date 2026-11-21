@@ -894,6 +894,9 @@ orders = query(
     order_params,
 )
 
+# Solo presentación: el estado ERP original permanece inalterado.
+orders.loc[orders["is_closed"], "order_status"] = "Cerrada"
+
 if selected_project != "Todos":
     st.divider()
     of_granted = float(orders["hours_granted"].sum()) if orders["hours_granted"].notna().all() else None
