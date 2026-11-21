@@ -11,6 +11,7 @@ from pathlib import Path
 import psycopg
 from dotenv import load_dotenv
 from validate_snapshot import validate
+from closed_of_pipeline import load_closed_pipeline
 
 
 def read_text(path: Path) -> str:
@@ -129,7 +130,7 @@ def load_hours(cur, path: Path, snapshot: date, ct: str) -> tuple[int, str]:
     require_headers(headers, required, path)
 
     digest = file_hash(path)
-    cur.execute("DELETE FROM fact_hours WHERE snapshot_date = %s", (snapshot,))
+    cur.execute("DELETE FROM fact_hours WHERE snapshot_date = %s AND work_center = %s", (snapshot, ct))
 
     count = 0
     for source_row_no, raw in enumerate(rows, start=2):
@@ -192,6 +193,10 @@ def load_hours(cur, path: Path, snapshot: date, ct: str) -> tuple[int, str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Importa exports ERP a PostgreSQL/Neon.")
     parser.add_argument("--hours", required=True, type=Path, help="OOFF_OP_Planif_Terminada.txt")
+    parser.add_argument("--closed", required=True, type=Path, help="OOFFCerradasMO.txt")
+    parser.add_argument("--source-text", required=True, type=Path, help="ooff_texto.csv")
+    parser.add_argument("--expected-branch-id", default="br-blue-firefly-b1adfx47",
+                        help="Neon branch ID permitida (development por defecto)")
     parser.add_argument("--projects", required=True, type=Path, help="Proyectos_Sevilla.csv")
     parser.add_argument("--snapshot-date", default=date.today().isoformat(), help="YYYY-MM-DD")
     parser.add_argument("--ct", required=True, help="Centro de trabajo para limitar la carga")
@@ -204,7 +209,8 @@ def main() -> None:
     snapshot = date.fromisoformat(args.snapshot_date)
     validated = validate(args.hours, args.projects, args.of_text,
                          args.bonus_text, args.ct, args.prepared_zip,
-                         snapshot_date=args.snapshot_date)
+                         snapshot_date=args.snapshot_date,
+                         closed_file=args.closed, source_file=args.source_text)
     print(f"Gate de archivos: OK. Ct={args.ct}; OF={len(validated.orders)}; "
           f"bonos={len(validated.bonuses)}; filas de horas={validated.hours_rows}")
     if args.validate_only:
@@ -220,19 +226,26 @@ def main() -> None:
 
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
+            actual_branch = cur.execute("SELECT current_setting('neon.branch_id', true)").fetchone()[0]
+            if actual_branch != args.expected_branch_id:
+                raise ValueError(f'Conexión Neon no autorizada: rama {actual_branch!r}, esperada {args.expected_branch_id!r}. Sin escrituras.')
             cur.execute(schema.read_text(encoding="utf-8"))
             project_count = load_projects(cur, args.projects, validated.project_codes)
             hours_count, digest = load_hours(cur, args.hours, snapshot, args.ct)
             if hours_count != validated.hours_rows:
                 raise ValueError('Las filas de horas importadas no coinciden con la validación')
+            closed_result = load_closed_pipeline(cur, args.prepared_zip, snapshot, file_hash(args.closed))
             for table, key_name, desc_name, values, csv_path in (
                 ('of_descriptions', 'order_number', 'of_detailed_description', validated.of_text, args.of_text),
                 ('bonus_descriptions', 'bonus_id', 'bo_detailed_description', validated.bonus_text, args.bonus_text),
             ):
-                cur.execute(f'DELETE FROM {table} WHERE snapshot_date = %s', (snapshot,))
                 digest_text = file_hash(csv_path)
                 cur.executemany(
-                    f'INSERT INTO {table} (snapshot_date, {key_name}, {desc_name}, source_file_hash) VALUES (%s,%s,%s,%s)',
+                    f'''INSERT INTO {table} (snapshot_date, {key_name}, {desc_name}, source_file_hash)
+                        VALUES (%s,%s,%s,%s)
+                        ON CONFLICT (snapshot_date, {key_name}) DO UPDATE SET
+                            {desc_name} = EXCLUDED.{desc_name},
+                            source_file_hash = EXCLUDED.source_file_hash''',
                     [(snapshot, key, value, digest_text) for key,value in sorted(values.items())],
                 )
 
@@ -256,15 +269,18 @@ def main() -> None:
                 WHERE f.snapshot_date = %s
                   AND f.project_code IS NOT NULL
                   AND p.project_code IS NULL
+                  AND f.work_center = %s
                 """,
-                (snapshot,),
+                (snapshot, args.ct),
             ).fetchone()[0]
 
             if unmatched:
                 raise ValueError(f'Hay {unmatched} proyectos sin correspondencia en maestro; rollback')
 
             for csv_path, values in ((args.of_text, validated.of_text),
-                                     (args.bonus_text, validated.bonus_text)):
+                                     (args.bonus_text, validated.bonus_text),
+                                     (args.closed, {str(i): None for i in range(closed_result['closed_of'])}),
+                                     (args.source_text, {})):
                 cur.execute(
                     '''INSERT INTO imports (snapshot_date, source_name, file_hash, row_count)
                        VALUES (%s,%s,%s,%s)
@@ -280,9 +296,9 @@ def main() -> None:
                     COALESCE(SUM(hours_incurred),0),
                     COALESCE(SUM(hours_pending),0)
                 FROM fact_hours
-                WHERE snapshot_date = %s
+                WHERE snapshot_date = %s AND work_center = %s
                 """,
-                (snapshot,),
+                (snapshot, args.ct),
             ).fetchone()
 
         conn.commit()
@@ -290,6 +306,7 @@ def main() -> None:
     print(f"Snapshot: {snapshot}")
     print(f"Proyectos maestro procesados: {project_count}")
     print(f"Filas de horas importadas: {hours_count}")
+    print(f"Cierres OF importados (registro separado): {closed_result}")
     print(f"Proyectos sin correspondencia: {unmatched}")
     print(f"Horas concedidas: {totals[0]}")
     print(f"Horas incurridas: {totals[1]}")
