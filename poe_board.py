@@ -311,7 +311,7 @@ def director_bar_sources(url, snapshot_id, codes):
                 WHERE work_center='422'
             ), incurred AS (
                 SELECT m.code, SUM(f.hours_incurred) AS incurred_hours
-                FROM fact_hours f
+                FROM v_reporting_of_hours f
                 JOIN latest l ON f.snapshot_date=l.snapshot_date
                 JOIN manager_codes m USING (project_code)
                 WHERE f.work_center='422'
