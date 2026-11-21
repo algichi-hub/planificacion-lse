@@ -89,6 +89,18 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
         for row in closed_rows:
             cp.write_row((row["OF numero"], Decimal(row["H_INV_TOT_"])))
 
+    # Preserve explicit manual assignments on subsequent imports. Never silently
+    # prefer manual CT if a newly discovered ERP bonus proves another CT.
+    conflicts = cur.execute("""
+        SELECT a.order_number, a.work_center, r.work_center
+        FROM closed_of_manual_assignments a
+        JOIN bonus_ct_registry r ON r.order_number=a.order_number
+        WHERE a.work_center <> r.work_center
+        LIMIT 20
+    """).fetchall()
+    if conflicts:
+        raise ValueError(f"Asociaciones manuales en conflicto con el ERP: {conflicts}")
+
     # A snapshot can be retried with the same source, but must never be silently
     # overwritten with a different closed-OF export.
     previous = cur.execute(
@@ -103,13 +115,15 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
             (snapshot_date, order_number, hours_incurred, project_code,
              work_center, attribution_status, source_file_hash)
         SELECT %s, c.order_number, c.hours_incurred,
-               CASE WHEN p.project_count = 1 THEN p.project_code ELSE NULL END,
-               CASE WHEN w.ct_count = 1 THEN w.work_center ELSE NULL END,
-               CASE WHEN w.ct_count IS NULL THEN 'unknown_ct'
+               COALESCE(a.project_code, CASE WHEN p.project_count = 1 THEN p.project_code END),
+               COALESCE(a.work_center, CASE WHEN w.ct_count = 1 THEN w.work_center END),
+               CASE WHEN a.order_number IS NOT NULL THEN 'single_ct'
+                    WHEN w.ct_count IS NULL THEN 'unknown_ct'
                     WHEN w.ct_count > 1 THEN 'multi_ct'
                     ELSE 'single_ct' END,
                %s
         FROM incoming_closed c
+        LEFT JOIN closed_of_manual_assignments a ON a.order_number = c.order_number
         LEFT JOIN (
             SELECT r.order_number, COUNT(DISTINCT r.work_center) AS ct_count,
                    MIN(r.work_center) AS work_center
