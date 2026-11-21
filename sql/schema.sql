@@ -106,6 +106,24 @@ CREATE TABLE IF NOT EXISTS closed_of_source_descriptions (
     PRIMARY KEY (snapshot_date, order_number)
 );
 
+-- Snapshot-scoped, validated LLM descriptions. The generic ERP descriptions
+-- remain stored separately and are not used as fallback in the dashboard.
+CREATE TABLE IF NOT EXISTS of_descriptions (
+    snapshot_date DATE NOT NULL,
+    order_number TEXT NOT NULL,
+    of_detailed_description TEXT NOT NULL CHECK (btrim(of_detailed_description) <> ''),
+    source_file_hash TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, order_number)
+);
+
+CREATE TABLE IF NOT EXISTS bonus_descriptions (
+    snapshot_date DATE NOT NULL,
+    bonus_id TEXT NOT NULL,
+    bo_detailed_description TEXT NOT NULL CHECK (btrim(bo_detailed_description) <> ''),
+    source_file_hash TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, bonus_id)
+);
+
 -- A closed OF is 100% consumed: reporting grants equal definitive incurred hours.
 -- Raw ERP source hours remain unchanged and are never distributed to bonuses.
 -- Previous snapshots are not backfilled; closed totals apply only on their dated rows.
@@ -210,21 +228,3 @@ GROUP BY
     f.order_number,
     f.operation_number,
     f.bonus_id;
-
--- Snapshot-scoped, validated LLM descriptions. The generic ERP descriptions
--- remain stored separately and are not used as fallback in the dashboard.
-CREATE TABLE IF NOT EXISTS of_descriptions (
-    snapshot_date DATE NOT NULL,
-    order_number TEXT NOT NULL,
-    of_detailed_description TEXT NOT NULL CHECK (btrim(of_detailed_description) <> ''),
-    source_file_hash TEXT NOT NULL,
-    PRIMARY KEY (snapshot_date, order_number)
-);
-
-CREATE TABLE IF NOT EXISTS bonus_descriptions (
-    snapshot_date DATE NOT NULL,
-    bonus_id TEXT NOT NULL,
-    bo_detailed_description TEXT NOT NULL CHECK (btrim(bo_detailed_description) <> ''),
-    source_file_hash TEXT NOT NULL,
-    PRIMARY KEY (snapshot_date, bonus_id)
-);
