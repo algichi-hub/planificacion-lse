@@ -83,7 +83,7 @@ def validate(hours: Path,projects: Path,of_csv: Path,bonus_csv: Path,ct: str,
                 digest=hashlib.sha256(p.read_bytes()).hexdigest()
                 if hashes.get(p.name)!=digest:
                     raise ValueError(f"{p.name}: ha cambiado desde pre_snapshot.ps1")
-            if not {"indice_of.csv","indice_bonos.csv", "indice_bono_ct.csv", "indice_of_cerradas.csv"}.issubset(z.namelist()):
+            if not {"indice_of.csv","indice_bonos.csv", "indice_bono_ct.csv", "indice_of_cerradas.csv", "indice_of_cerradas_descripciones.csv"}.issubset(z.namelist()):
                 raise ValueError("Faltan índices obligatorios del nuevo ZIP consolidado")
             if z.testzip() is not None:
                 raise ValueError("ZIP consolidado corrupto")
@@ -99,6 +99,12 @@ def validate(hours: Path,projects: Path,of_csv: Path,bonus_csv: Path,ct: str,
                 raise ValueError("Índice bono-CT incompatible con el ERP actual")
             if len(idx_closed)!=len(all_closed) or {r["OF numero"]:r["H_INV_TOT_"] for r in idx_closed}!=all_closed:
                 raise ValueError("Índice OF cerradas incompatible con el ERP actual")
+            idx_source_desc=list(csv.DictReader(io.TextIOWrapper(z.open("indice_of_cerradas_descripciones.csv"),encoding="utf-8-sig"),delimiter=";"))
+            if (len(idx_source_desc) != len({r["OF numero"] for r in idx_source_desc})
+                or any(r["OF numero"] not in all_closed or not r["Descripcion origen"].strip() for r in idx_source_desc)):
+                raise ValueError("Descripciones de OF cerradas duplicadas, desconocidas o vacías")
+            if manifest.get("closed_of_source_descriptions_count") != len(idx_source_desc):
+                raise ValueError("Recuento de descripciones de OF cerradas inconsistente")
             if len(idx_of)!=len(orders):
                 raise ValueError("Índice OF con claves duplicadas")
     return ValidatedSnapshot(orders,set(op_map),project_codes,of_text,bonus_text,hours_rows)
