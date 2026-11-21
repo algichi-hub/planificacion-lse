@@ -85,6 +85,15 @@ class PreSnapshotClosedTest(unittest.TestCase):
             prepare(self.hours, self.projects, self.source, self.out,
                     "422", "2026-11-21", self.closed)
 
+    def test_blank_erp_separator_lines_are_skipped(self):
+        with self.hours.open("a", encoding="cp1252") as stream:
+            stream.write("\n")
+        with self.closed.open("a", encoding="cp1252") as stream:
+            stream.write("\n")
+        bonus_ct, closed = inspect_erp_sources(self.hours, self.closed)
+        self.assertEqual(len(bonus_ct), 2)
+        self.assertEqual(closed, {"222222": "1234.5678"})
+
     def test_duplicate_closed_order_blocks(self):
         write_pipe(self.closed, ["O_FABR", "ESTATU", "H_INV_TOT_"],
                    [["222222", "Cerrad", "1"], ["222222", "Cerrad", "2"]])
