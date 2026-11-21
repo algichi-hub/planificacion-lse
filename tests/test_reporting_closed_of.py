@@ -20,7 +20,9 @@ class ReportingContractTests(unittest.TestCase):
         view = sql.split("CREATE OR REPLACE VIEW v_reporting_of_hours AS", 1)[1].split("CREATE OR REPLACE VIEW v_latest_snapshot AS", 1)[0]
         self.assertIn("UNION ALL", view)
         self.assertIn("c.hours_incurred", view)
-        self.assertIn("NULL::NUMERIC AS hours_granted", view)
+        self.assertIn("c.hours_incurred AS hours_granted", view)
+        self.assertIn("0::NUMERIC AS hours_pending", view)
+        self.assertNotIn("NULL::NUMERIC AS hours_granted", view)
         self.assertIn("NOT EXISTS", view)
         self.assertNotIn("JOIN bonus_ct_registry", view)
 
@@ -47,6 +49,28 @@ class ReportingContractTests(unittest.TestCase):
         self.assertIn('granted is None', app)
         self.assertIn('of_granted is None', app)
         self.assertIn("sum(min_count=1)", app)
+
+    def test_operative_to_closed_transition_reporting_contract(self):
+        sql = source("sql/schema.sql")
+        operational, closed = sql.split("CREATE OR REPLACE VIEW v_reporting_of_hours AS", 1)[1].split("UNION ALL", 1)
+        closed = closed.split("CREATE OR REPLACE VIEW v_latest_snapshot AS", 1)[0]
+        self.assertIn("SUM(f.hours_granted) AS hours_granted", operational)
+        self.assertIn("SUM(f.hours_incurred) AS hours_incurred", operational)
+        self.assertIn("c.hours_incurred AS hours_granted", closed)
+        self.assertIn("c.hours_incurred", closed)
+        self.assertIn("0::NUMERIC AS hours_pending", closed)
+        self.assertIn("NOT EXISTS", closed)
+
+    def test_import_rejects_same_snapshot_conflicts(self):
+        loader = source("scripts/closed_of_pipeline.py")
+        self.assertIn("JOIN incoming_closed c ON c.order_number = f.order_number", loader)
+        self.assertIn("f.snapshot_date = %s", loader)
+        self.assertIn("OF simultáneamente operativas y cerradas", loader)
+
+    def test_import_rejects_unexpected_reopenings(self):
+        loader = source("scripts/closed_of_pipeline.py")
+        self.assertIn("old.snapshot_date < %s", loader)
+        self.assertIn("OF cerrada previamente reaparece operativa", loader)
 
     def test_manual_assignments_survive_reimport(self):
         loader = source("scripts/closed_of_pipeline.py")
