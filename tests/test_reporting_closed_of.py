@@ -62,7 +62,7 @@ class ReportingContractTests(unittest.TestCase):
         app = source("app.py")
         self.assertIn('granted is None', app)
         self.assertIn('of_granted is None', app)
-        self.assertIn("sum(min_count=1)", app)
+        self.assertIn('orders[["order_number", "hours_granted", "hours_incurred", "is_closed"]].copy()', app)
 
     def test_operative_to_closed_transition_reporting_contract(self):
         sql = source("sql/schema.sql")
