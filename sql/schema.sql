@@ -53,95 +53,6 @@ CREATE INDEX IF NOT EXISTS idx_fact_hours_bonus
 CREATE INDEX IF NOT EXISTS idx_fact_hours_work_center
     ON fact_hours (snapshot_date, work_center);
 
-CREATE OR REPLACE VIEW v_latest_snapshot AS
-SELECT MAX(snapshot_date) AS snapshot_date
-FROM fact_hours;
-
-CREATE OR REPLACE VIEW v_project_hours AS
-SELECT
-    f.snapshot_date,
-    f.project_code,
-    f.work_center,
-    COALESCE(MAX(p.description), MAX(f.project_code)) AS project_description,
-    MAX(p.customer) AS customer,
-    MAX(p.status) AS project_status,
-    MAX(p.project_manager) AS project_manager,
-    SUM(f.hours_granted) AS hours_granted,
-    SUM(f.hours_incurred) AS hours_incurred,
-    SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
-    SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
-    CASE
-        WHEN SUM(f.hours_granted) = 0 THEN NULL
-        ELSE SUM(f.hours_incurred) / SUM(f.hours_granted)
-    END AS consumption_ratio
-FROM fact_hours f
-LEFT JOIN projects p ON p.project_code = f.project_code
-GROUP BY f.snapshot_date, f.project_code, f.work_center;
-
-CREATE OR REPLACE VIEW v_order_hours AS
-SELECT
-    f.snapshot_date,
-    f.project_code,
-    f.work_center,
-    f.order_number,
-    MAX(f.order_description) AS order_description,
-    MAX(f.order_status) AS order_status,
-    SUM(f.hours_granted) AS hours_granted,
-    SUM(f.hours_incurred) AS hours_incurred,
-    SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
-    SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
-    CASE
-        WHEN SUM(f.hours_granted) = 0 THEN NULL
-        ELSE SUM(f.hours_incurred) / SUM(f.hours_granted)
-    END AS consumption_ratio
-FROM fact_hours f
-GROUP BY f.snapshot_date, f.project_code, f.work_center, f.order_number;
-
-CREATE OR REPLACE VIEW v_bonus_hours AS
-SELECT
-    f.snapshot_date,
-    f.project_code,
-    f.work_center,
-    f.order_number,
-    f.operation_number,
-    f.bonus_id,
-    MAX(f.operation_description) AS operation_description,
-    SUM(f.hours_granted) AS hours_granted,
-    SUM(f.hours_incurred) AS hours_incurred,
-    SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
-    SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
-    CASE
-        WHEN SUM(f.hours_granted) = 0 THEN NULL
-        ELSE SUM(f.hours_incurred) / SUM(f.hours_granted)
-    END AS consumption_ratio
-FROM fact_hours f
-GROUP BY
-    f.snapshot_date,
-    f.project_code,
-    f.work_center,
-    f.order_number,
-    f.operation_number,
-    f.bonus_id;
-
--- Snapshot-scoped, validated LLM descriptions. The generic ERP descriptions
--- remain stored separately and are not used as fallback in the dashboard.
-CREATE TABLE IF NOT EXISTS of_descriptions (
-    snapshot_date DATE NOT NULL,
-    order_number TEXT NOT NULL,
-    of_detailed_description TEXT NOT NULL CHECK (btrim(of_detailed_description) <> ''),
-    source_file_hash TEXT NOT NULL,
-    PRIMARY KEY (snapshot_date, order_number)
-);
-
-CREATE TABLE IF NOT EXISTS bonus_descriptions (
-    snapshot_date DATE NOT NULL,
-    bonus_id TEXT NOT NULL,
-    bo_detailed_description TEXT NOT NULL CHECK (btrim(bo_detailed_description) <> ''),
-    source_file_hash TEXT NOT NULL,
-    PRIMARY KEY (snapshot_date, bonus_id)
-);
-
-
 -- Persistent, incremental mapping: operation/bonus -> work center.
 CREATE TABLE IF NOT EXISTS bonus_ct_registry (
     bonus_id TEXT PRIMARY KEY CHECK (bonus_id ~ '^[0-9]{10}$'),
@@ -208,3 +119,91 @@ WHERE c.project_code IS NOT NULL AND c.work_center IS NOT NULL
       SELECT 1 FROM fact_hours f
       WHERE f.snapshot_date = c.snapshot_date AND f.order_number = c.order_number
   );
+
+CREATE OR REPLACE VIEW v_latest_snapshot AS
+SELECT MAX(snapshot_date) AS snapshot_date
+FROM v_reporting_of_hours;
+
+CREATE OR REPLACE VIEW v_project_hours AS
+SELECT
+    f.snapshot_date,
+    f.project_code,
+    f.work_center,
+    COALESCE(MAX(p.description), MAX(f.project_code)) AS project_description,
+    MAX(p.customer) AS customer,
+    MAX(p.status) AS project_status,
+    MAX(p.project_manager) AS project_manager,
+    CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) END AS hours_granted,
+    SUM(f.hours_incurred) AS hours_incurred,
+    CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_incurred) - SUM(f.hours_granted) END AS deviation_hours,
+    CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) - SUM(f.hours_incurred) END AS remaining_hours,
+    CASE
+        WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 OR SUM(f.hours_granted) = 0 THEN NULL
+        ELSE SUM(f.hours_incurred) / SUM(f.hours_granted)
+    END AS consumption_ratio
+FROM v_reporting_of_hours f
+LEFT JOIN projects p ON p.project_code = f.project_code
+GROUP BY f.snapshot_date, f.project_code, f.work_center;
+
+CREATE OR REPLACE VIEW v_order_hours AS
+SELECT
+    f.snapshot_date,
+    f.project_code,
+    f.work_center,
+    f.order_number,
+    MAX(f.order_description) AS order_description,
+    MAX(f.order_status) AS order_status,
+    CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) END AS hours_granted,
+    SUM(f.hours_incurred) AS hours_incurred,
+    CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_incurred) - SUM(f.hours_granted) END AS deviation_hours,
+    CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) - SUM(f.hours_incurred) END AS remaining_hours,
+    CASE
+        WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 OR SUM(f.hours_granted) = 0 THEN NULL
+        ELSE SUM(f.hours_incurred) / SUM(f.hours_granted)
+    END AS consumption_ratio
+FROM v_reporting_of_hours f
+GROUP BY f.snapshot_date, f.project_code, f.work_center, f.order_number;
+
+CREATE OR REPLACE VIEW v_bonus_hours AS
+SELECT
+    f.snapshot_date,
+    f.project_code,
+    f.work_center,
+    f.order_number,
+    f.operation_number,
+    f.bonus_id,
+    MAX(f.operation_description) AS operation_description,
+    SUM(f.hours_granted) AS hours_granted,
+    SUM(f.hours_incurred) AS hours_incurred,
+    SUM(f.hours_incurred) - SUM(f.hours_granted) AS deviation_hours,
+    SUM(f.hours_granted) - SUM(f.hours_incurred) AS remaining_hours,
+    CASE
+        WHEN SUM(f.hours_granted) = 0 THEN NULL
+        ELSE SUM(f.hours_incurred) / SUM(f.hours_granted)
+    END AS consumption_ratio
+FROM fact_hours f
+GROUP BY
+    f.snapshot_date,
+    f.project_code,
+    f.work_center,
+    f.order_number,
+    f.operation_number,
+    f.bonus_id;
+
+-- Snapshot-scoped, validated LLM descriptions. The generic ERP descriptions
+-- remain stored separately and are not used as fallback in the dashboard.
+CREATE TABLE IF NOT EXISTS of_descriptions (
+    snapshot_date DATE NOT NULL,
+    order_number TEXT NOT NULL,
+    of_detailed_description TEXT NOT NULL CHECK (btrim(of_detailed_description) <> ''),
+    source_file_hash TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, order_number)
+);
+
+CREATE TABLE IF NOT EXISTS bonus_descriptions (
+    snapshot_date DATE NOT NULL,
+    bonus_id TEXT NOT NULL,
+    bo_detailed_description TEXT NOT NULL CHECK (btrim(bo_detailed_description) <> ''),
+    source_file_hash TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, bonus_id)
+);
