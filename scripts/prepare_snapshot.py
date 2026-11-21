@@ -150,6 +150,7 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
     if missing_projects:
         raise ValueError(f'Proyectos de Ct. {ct} ausentes del maestro: {missing_projects[:20]}')
     grouped = defaultdict(list)
+    closed_descriptions = {}
     issues = Counter()
     if source.suffix.lower() != '.csv':
         raise ValueError('El origen de textos debe ser un CSV sin comprimir: ooff_texto.csv')
@@ -208,6 +209,10 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                     text_match = re.match(r'^\s{20,}\|(.*?)\|?\s*$', line)
                     report_text = text_match.group(1).rstrip().rstrip('|').strip() if text_match else ''
                 issues['source_lines_total'] += 1
+                if current_order in closed_orders:
+                    label = current_fields.get('Descripcion', '').strip()
+                    if label and current_order not in closed_descriptions:
+                        closed_descriptions[current_order] = label
                 if current_order not in selected:
                     continue
                 issues['selected_source_lines'] += 1
@@ -231,6 +236,10 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                     continue
                 issues['source_lines_total'] += 1
                 order = normalized_order(values[0])
+                if order in closed_orders:
+                    label = dict(zip(HEADERS, values)).get('Descripcion', '').strip()
+                    if label and order not in closed_descriptions:
+                        closed_descriptions[order] = label
                 if order not in selected:
                     continue
                 issues['selected_source_lines'] += 1
@@ -267,6 +276,11 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
     closed_writer.writerow(['OF numero', 'H_INV_TOT_'])
     for order, hours_total in sorted(closed_orders.items()):
         closed_writer.writerow([order, hours_total])
+    source_desc_idx = io.StringIO(newline='')
+    source_desc_writer = csv.writer(source_desc_idx, delimiter=';', lineterminator='\r\n')
+    source_desc_writer.writerow(['OF numero', 'Descripcion origen'])
+    for order, description in sorted(closed_descriptions.items()):
+        source_desc_writer.writerow([order, description])
     try:
         with zipfile.ZipFile(temp, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             for order in sorted(selected):
@@ -288,6 +302,7 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                         'unique_of_selected':len(selected),
                         'unique_bonuses_selected':len(operations),
                         'closed_of_count':len(closed_orders),
+                        'closed_of_source_descriptions_count':len(closed_descriptions),
                         'bonus_ct_registry_count':len(bonus_ct),
                         'source_lines_selected':issues['selected_source_lines'],
                         'selected_embedded_pipe_rows':issues['selected_embedded_pipes'],
@@ -300,6 +315,7 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
             if closed is not None:
                 z.writestr('indice_bono_ct.csv', registry_idx.getvalue().encode('utf-8-sig'))
                 z.writestr('indice_of_cerradas.csv', closed_idx.getvalue().encode('utf-8-sig'))
+                z.writestr('indice_of_cerradas_descripciones.csv', source_desc_idx.getvalue().encode('utf-8-sig'))
             z.writestr('manifiesto.json',json.dumps(manifest, ensure_ascii=False,indent=2))
         with zipfile.ZipFile(temp) as z:
             if z.testzip() is not None: raise ValueError('ZIP generado incorrectamente')
@@ -319,6 +335,11 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                     raise ValueError('Índice de bono-CT incorrecto')
                 if {r['OF numero']: r['H_INV_TOT_'] for r in closed_rows} != closed_orders or len(closed_rows) != len(closed_orders):
                     raise ValueError('Índice de OF cerradas incorrecto')
+                with z.open('indice_of_cerradas_descripciones.csv') as fp:
+                    source_desc_rows = list(csv.DictReader(io.TextIOWrapper(fp, encoding='utf-8-sig'), delimiter=';'))
+                if (len(source_desc_rows) != len(closed_descriptions) or
+                    {r['OF numero']:r['Descripcion origen'] for r in source_desc_rows} != closed_descriptions):
+                    raise ValueError('Índice de descripciones de OF cerradas incorrecto')
             if len(bonus_rows) != len(operations):
                 raise ValueError('El índice no contiene todos los bonos')
             indexed_bonuses = {row['Bono numero'] for row in bonus_rows}
