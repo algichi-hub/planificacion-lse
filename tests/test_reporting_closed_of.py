@@ -37,6 +37,20 @@ class ReportingContractTests(unittest.TestCase):
         self.assertIn("FROM fact_hours f", bonus)
         self.assertIn("if bonuses.empty:", bonus)
 
+    def test_closed_of_colors_are_local_to_home_order_chart(self):
+        app = source("app.py")
+        order_sql = app.split("orders = query(", 1)[1].split('if selected_project != "Todos":', 1)[0]
+        order_chart = app.split('st.subheader("RESUMEN ORDEN DE FABRICACIÓN")', 1)[1].split("fig_orders.update_layout(", 1)[0]
+        risk = app.split('if view == "risks":', 1)[1].split("projects = query(", 1)[0]
+        self.assertIn("BOOL_OR(f.hours_source = 'CLOSED_OF') AS is_closed", order_sql)
+        self.assertIn('order_chart.loc[order_chart["is_closed"], "Serie"] += " · cerrada"', order_chart)
+        self.assertIn('"Concedidas": "#F2C94C"', order_chart)
+        self.assertIn('"Incurridas": "#F2994A"', order_chart)
+        self.assertIn('"Concedidas · cerrada": "#B8860B"', order_chart)
+        self.assertIn('"Incurridas · cerrada": "#7B2943"', order_chart)
+        self.assertNotIn("is_closed", risk)
+        self.assertIn("FROM fact_hours f", risk)
+
     def test_eac_poe_incurred_use_of_grain(self):
         self.assertIn("FROM v_reporting_of_hours f", source("eac_board.py"))
         self.assertIn("FROM v_reporting_of_hours f", source("poe_board.py"))
