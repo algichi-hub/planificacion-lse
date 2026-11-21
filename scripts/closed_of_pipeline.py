@@ -78,7 +78,7 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
         INSERT INTO bonus_ct_registry
             (bonus_id, order_number, work_center, first_seen_snapshot, last_seen_snapshot)
         SELECT bonus_id, LEFT(bonus_id, 6), work_center, %s, %s
-        FROM incoming_bonus_ct
+        FROM incoming_bonus_ct WHERE TRUE
         ON CONFLICT (bonus_id) DO UPDATE SET
             last_seen_snapshot = GREATEST(bonus_ct_registry.last_seen_snapshot,
                                          EXCLUDED.last_seen_snapshot)
