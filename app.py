@@ -873,6 +873,7 @@ orders = query(
         f.order_number,
         COALESCE(MAX(od.of_detailed_description), MAX(f.order_description), 'Pendiente confirmar') AS order_description,
         MAX(f.order_status) AS order_status,
+        BOOL_OR(f.hours_source = 'CLOSED_OF') AS is_closed,
         CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_granted) END AS hours_granted,
         SUM(f.hours_incurred) AS hours_incurred,
         CASE WHEN COUNT(*) FILTER (WHERE f.hours_granted IS NULL)>0 THEN NULL ELSE SUM(f.hours_incurred) - SUM(f.hours_granted) END AS deviation_hours,
@@ -905,14 +906,12 @@ if selected_project != "Todos":
     of1.metric("Horas concedidas", "—" if of_granted is None else f"{of_granted:,.1f} h")
     of2.metric("Consumo", "—" if of_consumption is None else f"{of_consumption:.1%}")
 
-    order_chart = (
-        orders[["order_number", "hours_granted", "hours_incurred"]]
-        .groupby("order_number", as_index=False)[["hours_granted", "hours_incurred"]]
-        .sum(min_count=1)
-    )
+    # Closed OFs have definitive OF-level hours, not bonus-level estimates.
+    # Preserve the existing colors for operative OFs and distinguish closed ones.
+    order_chart = orders[["order_number", "hours_granted", "hours_incurred", "is_closed"]].copy()
     order_chart["order_number"] = order_chart["order_number"].astype("string")
     order_chart = order_chart.melt(
-        id_vars="order_number",
+        id_vars=["order_number", "is_closed"],
         value_vars=["hours_granted", "hours_incurred"],
         var_name="Serie",
         value_name="Horas",
@@ -921,6 +920,7 @@ if selected_project != "Todos":
         "hours_granted": "Concedidas",
         "hours_incurred": "Incurridas",
     })
+    order_chart.loc[order_chart["is_closed"], "Serie"] += " · cerrada"
     fig_orders = px.bar(
         order_chart,
         y="order_number",
@@ -931,7 +931,13 @@ if selected_project != "Todos":
         color_discrete_map={
             "Concedidas": "#F2C94C",
             "Incurridas": "#F2994A",
+            "Concedidas · cerrada": "#B8860B",  # Ocre
+            "Incurridas · cerrada": "#7B2943",  # Granate
         },
+        category_orders={"Serie": [
+            "Concedidas", "Incurridas",
+            "Concedidas · cerrada", "Incurridas · cerrada",
+        ]},
         labels={"order_number": "OF"},
     )
     fig_orders.update_layout(
