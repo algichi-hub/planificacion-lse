@@ -1,10 +1,13 @@
 param(
     [string]$Ct,
     [string]$SnapshotDate = (Get-Date -Format "yyyy-MM-dd"),
-    [string]$HoursFile = "data/OOFF_OP_Planif_Terminada.txt",
-    [string]$ProjectsFile = "data/Proyectos_Sevilla.csv",
-    [string]$OfTextFile = "data/ooff_texto_interpretado.csv",
-    [string]$BonusTextFile = "data/bono_texto_interpretado.csv",
+    [string]$HoursFile = "entrada/OOFF_OP_Planif_Terminada.txt",
+    [string]$ClosedFile = "entrada/OOFFCerradasMO.txt",
+    [string]$SourceTextFile = "entrada/ooff_texto.csv",
+    [string]$ExpectedNeonBranchId = "br-blue-firefly-b1adfx47",
+    [string]$ProjectsFile = "entrada/Proyectos_Sevilla.csv",
+    [string]$OfTextFile = "entrada/ooff_texto_interpretado.csv",
+    [string]$BonusTextFile = "entrada/bono_texto_interpretado.csv",
     [string]$PreparedZip = "data/ooff_texto_consolidado.zip",
     [switch]$ValidateOnly,
     [switch]$Help
@@ -24,11 +27,14 @@ USO:
 PARÁMETROS:
   -Ct             Centro obligatorio salvo con -Help.
   -SnapshotDate   Fecha de snapshot, por defecto hoy (yyyy-MM-dd).
-  -HoursFile      data/OOFF_OP_Planif_Terminada.txt.
-  -ProjectsFile   data/Proyectos_Sevilla.csv.
-  -OfTextFile     data/ooff_texto_interpretado.csv.
-  -BonusTextFile  data/bono_texto_interpretado.csv.
-  -PreparedZip    data/ooff_texto_consolidado.zip (índices, fecha y hashes).
+  -HoursFile      entrada/OOFF_OP_Planif_Terminada.txt.
+  -ClosedFile     entrada/OOFFCerradasMO.txt.
+  -SourceTextFile entrada/ooff_texto.csv.
+  -ExpectedNeonBranchId  br-blue-firefly-b1adfx47 (development, seguridad).
+  -ProjectsFile   entrada/Proyectos_Sevilla.csv.
+  -OfTextFile     entrada/ooff_texto_interpretado.csv.
+  -BonusTextFile  entrada/bono_texto_interpretado.csv.
+  -PreparedZip    data/ooff_texto_consolidado.zip (obligatorio; índices, fecha y hashes).
   -ValidateOnly   Valida archivos sin conectarse ni escribir en Neon.
   -Help           Muestra esta ayuda y termina sin conectarse a Neon.
 
@@ -51,12 +57,14 @@ function Resolve-ProjectPath([string]$candidate) {
 }
 
 $hours = Resolve-ProjectPath $HoursFile
+$closed = Resolve-ProjectPath $ClosedFile
+$sourceText = Resolve-ProjectPath $SourceTextFile
 $projects = Resolve-ProjectPath $ProjectsFile
 $ofText = Resolve-ProjectPath $OfTextFile
 $bonusText = Resolve-ProjectPath $BonusTextFile
 $prepared = Resolve-ProjectPath $PreparedZip
 
-foreach ($file in @($hours, $projects, $ofText, $bonusText)) {
+foreach ($file in @($hours, $closed, $sourceText, $projects, $ofText, $bonusText, $prepared)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         throw "Entrada obligatoria ausente: $file"
     }
@@ -65,6 +73,9 @@ foreach ($file in @($hours, $projects, $ofText, $bonusText)) {
 $arguments = @(
     (Join-Path $scriptDir "import_erp.py"),
     "--hours", $hours,
+    "--closed", $closed,
+    "--source-text", $sourceText,
+    "--expected-branch-id", $ExpectedNeonBranchId,
     "--projects", $projects,
     "--of-text", $ofText,
     "--bonus-text", $bonusText,
@@ -72,9 +83,7 @@ $arguments = @(
     "--snapshot-date", $SnapshotDate
 )
 
-if (Test-Path -LiteralPath $prepared -PathType Leaf) {
-    $arguments += @("--prepared-zip", $prepared)
-}
+ $arguments += @("--prepared-zip", $prepared)
 
 if ($ValidateOnly) {
     $arguments += "--validate-only"
