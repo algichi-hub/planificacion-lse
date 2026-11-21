@@ -4,13 +4,24 @@ Sistema **Planificación LSE**. Ejecutar en Windows PowerShell desde la raíz de
 
 **Prompt maestro para interpretar los expedientes:** [LLM_ERP_PROMPT.md](LLM_ERP_PROMPT.md). Emplear siempre su versión vigente con el ZIP generado por `pre_snapshot.ps1`.
 
-> **Rama `feature/closed-of-importer` — fase pre-snapshot (en desarrollo).** El preparador ya toma cuatro exportaciones de `entrada/`: `OOFF_OP_Planif_Terminada.txt`, `Proyectos_Sevilla.csv`, `ooff_texto.csv` y `OOFFCerradasMO.txt`. Su salida sigue siendo `data/ooff_texto_consolidado.zip`. El ZIP conserva los índices y JSON previos y añade `indice_bono_ct.csv` (todos los bonos operativos, sin filtrar CT) e `indice_of_cerradas.csv` (solo `ESTATU=Cerrad`, horas `H_INV_TOT_` con cuatro decimales). Bloquea OF solapadas entre ambas fuentes ERP **antes de escribir el ZIP**. No toca Neon ni atribuye horas de cierre a CT/bonos. **El cargador `load_snapshot.ps1` todavía conserva su contrato anterior y no debe ejecutarse con la nueva operativa hasta adaptarlo y validarlo.**
+> **Desarrollo `feature/closed-of-importer` — importador de seis entradas.** Los cuatro ERP originales y los dos CSV interpretados deben estar en `entrada/`. La preparación `pre_snapshot.ps1 -Ct 422` conserva su salida `data/ooff_texto_consolidado.zip`. El ZIP incluye los índices originales y los auxiliares `indice_bono_ct.csv` e `indice_of_cerradas.csv`. `load_snapshot.ps1 -Ct 422 -ValidateOnly` valida los seis ficheros, la fecha, los cuatro hashes y las coberturas **sin acceder a Neon**. Sin `-ValidateOnly`, la conexión debe apuntar exactamente a la rama Neon `development` (`br-blue-firefly-b1adfx47`), y toda la carga se ejecuta en una transacción. `main` y Neon `production` no se modifican.
+>
+> Las horas finales de OF cerradas se almacenan una sola vez por OF en `closed_of_hours`, con cuatro decimales. Las OF sin CT histórico o con más de un CT quedan sin atribución hasta su revisión, y las vistas existentes del tablero siguen consultando `fact_hours`: **los cierres aún no se suman al dashboard**. El registro histórico `bonus_ct_registry` se actualiza incrementalmente y rechaza conflictos sin sobrescribir CT existentes.
+
+**Ejecución en Windows (rama de desarrollo):**
 
 ```powershell
 cd C:\\Users\\algic\\Projects\\planificacion-lse
+git pull --ff-only origin feature/closed-of-importer
 python -m unittest discover -s tests -p test_pre_snapshot_closed.py -v
+python -m unittest discover -s tests -p test_load_snapshot_gate.py -v
 .\\scripts\\pre_snapshot.ps1 -Ct 422
+.\\scripts\\load_snapshot.ps1 -Ct 422 -ValidateOnly
+# SOLO con DATABASE_URL apuntando a Neon development y tras validar:
+.\\scripts\\load_snapshot.ps1 -Ct 422
 ```
+
+**Aviso de seguridad:** `DATABASE_URL` de Streamlit no modifica la variable de entorno de PowerShell. El cargador comprueba `current_setting('neon.branch_id', true)` antes de cualquier escritura y rechaza ramas distintas de `development`.
 
 ## Resumen del proceso
 
