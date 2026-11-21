@@ -110,7 +110,7 @@ def unpack_year(rows):
 def month_frame(data, period):
     return pd.DataFrame([
         {"Visible": bool(data.get("visible", {}).get(code, True)),
-         "Director": name, "Real (h)": float(data["hours"].get((code, period), (None, None))[0])
+         "Código": code, "Director": name, "Real (h)": float(data["hours"].get((code, period), (None, None))[0])
          if data["hours"].get((code, period), (None, None))[0] is not None else float("nan"),
          "Previsto (h)": float(data["hours"].get((code, period), (None, None))[1])
          if data["hours"].get((code, period), (None, None))[1] is not None else float("nan")}
@@ -125,7 +125,7 @@ def month_changes(data, period, edited):
         raise ValueError("La tabla ha cambiado de tamaño: recarga POE.")
     result = []
     for code, row in zip(codes, edited.to_dict("records")):
-        if row["Director"] != data["directors"][code]:
+        if row["Código"] != code or row["Director"] != data["directors"][code]:
             raise ValueError("Ha cambiado el orden de directores: recarga POE.")
         before = data["hours"].get((code, period), (None, None))
         after = (parse_hours(row["Real (h)"]), parse_hours(row["Previsto (h)"]))
@@ -543,9 +543,10 @@ def render(url):
             restore_pending_cells(data, period, pending)
             if state.get("poe_v5_retry_period") == period else month_frame(data, period),
             hide_index=True, use_container_width=True, num_rows="fixed",
-            disabled=["Director"],
+            disabled=["Código", "Director"],
             column_config={
                 "Visible": st.column_config.CheckboxColumn("Visible", width="small"),
+                "Código": st.column_config.TextColumn("Código", width="small"),
                 "Director": st.column_config.TextColumn("Director", width="large"),
                 "Real (h)": st.column_config.NumberColumn(
                     "Real (h)", min_value=0, step=1, format="%.0f"),
