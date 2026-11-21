@@ -238,7 +238,7 @@ def main() -> None:
             hours_count, digest = load_hours(cur, args.hours, snapshot, args.ct)
             if hours_count != validated.hours_rows:
                 raise ValueError('Las filas de horas importadas no coinciden con la validación')
-            closed_result = load_closed_pipeline(cur, args.prepared_zip, snapshot, file_hash(args.closed))
+            closed_result = load_closed_pipeline(cur, args.prepared_zip, snapshot, file_hash(args.closed), file_hash(args.source_text))
             for table, key_name, desc_name, values, csv_path in (
                 ('of_descriptions', 'order_number', 'of_detailed_description', validated.of_text, args.of_text),
                 ('bonus_descriptions', 'bonus_id', 'bo_detailed_description', validated.bonus_text, args.bonus_text),
