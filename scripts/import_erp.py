@@ -8,8 +8,6 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-import psycopg
-from dotenv import load_dotenv
 from validate_snapshot import validate
 from closed_of_pipeline import load_closed_pipeline
 
@@ -216,6 +214,10 @@ def main() -> None:
     if args.validate_only:
         print("VALIDATE ONLY: sin conexión ni escritura en Neon.")
         return
+
+    # Validation is intentionally stdlib-only; import DB dependencies only for writes.
+    from dotenv import load_dotenv
+    import psycopg
 
     load_dotenv()
     database_url = os.getenv("DATABASE_URL")
