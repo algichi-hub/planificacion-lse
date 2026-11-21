@@ -229,6 +229,8 @@ def main() -> None:
             actual_branch = cur.execute("SELECT current_setting('neon.branch_id', true)").fetchone()[0]
             if actual_branch != args.expected_branch_id:
                 raise ValueError(f'Conexión Neon no autorizada: rama {actual_branch!r}, esperada {args.expected_branch_id!r}. Sin escrituras.')
+            # Serialize imports for one date, including different CTs sharing closed OF.
+            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"lse-snapshot:{snapshot}",))
             cur.execute(schema.read_text(encoding="utf-8"))
             project_count = load_projects(cur, args.projects, validated.project_codes)
             hours_count, digest = load_hours(cur, args.hours, snapshot, args.ct)
@@ -279,8 +281,7 @@ def main() -> None:
 
             for csv_path, count in ((args.of_text, len(validated.of_text)),
                                     (args.bonus_text, len(validated.bonus_text)),
-                                    (args.closed, closed_result['closed_of']),
-                                    (args.source_text, 0)):
+                                    (args.closed, closed_result['closed_of'])):
                 cur.execute(
                     '''INSERT INTO imports (snapshot_date, source_name, file_hash, row_count)
                        VALUES (%s,%s,%s,%s)
