@@ -89,6 +89,33 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
         for row in closed_rows:
             cp.write_row((row["OF numero"], Decimal(row["H_INV_TOT_"])))
 
+    # Do not silently prefer bonus-level operational hours when the same OF has
+    # a definitive closing total in this snapshot. This is a source conflict,
+    # not a reason to drop the closing hours from reporting.
+    overlaps = cur.execute("""
+        SELECT f.order_number
+        FROM fact_hours f JOIN incoming_closed c ON c.order_number = f.order_number
+        WHERE f.snapshot_date = %s
+        GROUP BY f.order_number LIMIT 20
+    """, (snapshot,)).fetchall()
+    if overlaps:
+        raise ValueError(f"OF simultáneamente operativas y cerradas en el snapshot: {overlaps}")
+
+    # A previously closed OF reappearing as operative requires manual review,
+    # even if the new closing export no longer lists that OF.
+    reopened = cur.execute("""
+        SELECT DISTINCT f.order_number
+        FROM fact_hours f
+        JOIN closed_of_hours old ON old.order_number = f.order_number
+        WHERE f.snapshot_date = %s AND old.snapshot_date < %s
+          AND NOT EXISTS (
+              SELECT 1 FROM incoming_closed c WHERE c.order_number = f.order_number
+          )
+        LIMIT 20
+    """, (snapshot, snapshot)).fetchall()
+    if reopened:
+        raise ValueError(f"OF cerrada previamente reaparece operativa: {reopened}")
+
     # Preserve explicit manual assignments on subsequent imports. Never silently
     # prefer manual CT if a newly discovered ERP bonus proves another CT.
     conflicts = cur.execute("""
