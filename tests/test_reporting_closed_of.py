@@ -37,6 +37,18 @@ class ReportingContractTests(unittest.TestCase):
         self.assertIn("FROM fact_hours f", bonus)
         self.assertIn("if bonuses.empty:", bonus)
 
+    def test_risks_explicitly_exclude_closed_of_same_snapshot(self):
+        app = source("app.py")
+        risk = app.split('if view == "risks":', 1)[1].split("projects = query(", 1)[0]
+        self.assertIn("FROM fact_hours f", risk)
+        self.assertIn("AND f.bonus_id IS NOT NULL", risk)
+        self.assertIn("AND NOT EXISTS (", risk)
+        self.assertIn("SELECT 1 FROM closed_of_hours c", risk)
+        self.assertIn("c.snapshot_date = f.snapshot_date", risk)
+        self.assertIn("c.order_number = f.order_number", risk)
+        self.assertNotIn("c.work_center IS NOT NULL", risk)
+        self.assertNotIn("FROM v_reporting_of_hours f", risk)
+
     def test_closed_of_colors_are_local_to_home_order_chart(self):
         app = source("app.py")
         order_sql = app.split("orders = query(", 1)[1].split('if selected_project != "Todos":', 1)[0]
