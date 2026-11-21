@@ -4,6 +4,14 @@ Sistema **Planificación LSE**. Ejecutar en Windows PowerShell desde la raíz de
 
 **Prompt maestro para interpretar los expedientes:** [LLM_ERP_PROMPT.md](LLM_ERP_PROMPT.md). Emplear siempre su versión vigente con el ZIP generado por `pre_snapshot.ps1`.
 
+> **Rama `feature/closed-of-importer` — fase pre-snapshot (en desarrollo).** El preparador ya toma cuatro exportaciones de `entrada/`: `OOFF_OP_Planif_Terminada.txt`, `Proyectos_Sevilla.csv`, `ooff_texto.csv` y `OOFFCerradasMO.txt`. Su salida sigue siendo `data/ooff_texto_consolidado.zip`. El ZIP conserva los índices y JSON previos y añade `indice_bono_ct.csv` (todos los bonos operativos, sin filtrar CT) e `indice_of_cerradas.csv` (solo `ESTATU=Cerrad`, horas `H_INV_TOT_` con cuatro decimales). Bloquea OF solapadas entre ambas fuentes ERP **antes de escribir el ZIP**. No toca Neon ni atribuye horas de cierre a CT/bonos. **El cargador `load_snapshot.ps1` todavía conserva su contrato anterior y no debe ejecutarse con la nueva operativa hasta adaptarlo y validarlo.**
+
+```powershell
+cd C:\\Users\\algic\\Projects\\planificacion-lse
+python -m unittest discover -s tests -p test_pre_snapshot_closed.py -v
+.\\scripts\\pre_snapshot.ps1 -Ct 422
+```
+
 ## Resumen del proceso
 
 1. Exportar los tres ficheros ERP a `data/`.
