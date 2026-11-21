@@ -12,8 +12,10 @@ jobs:
         with:
           python-version: '3.12'
       - name: Syntax verification
-        run: python -m compileall -q scripts/prepare_snapshot.py scripts/consolidar_ooff_texto.py scripts/validate_snapshot.py scripts/import_erp.py scripts/closed_of_pipeline.py tests/test_pre_snapshot_closed.py tests/test_load_snapshot_gate.py
+        run: python -m compileall -q scripts/prepare_snapshot.py scripts/consolidar_ooff_texto.py scripts/validate_snapshot.py scripts/import_erp.py scripts/closed_of_pipeline.py tests/test_pre_snapshot_closed.py tests/test_load_snapshot_gate.py tests/test_reporting_closed_of.py app.py eac_board.py poe_board.py
       - name: Pre-snapshot tests (offline)
         run: python -m unittest discover -s tests -p test_pre_snapshot_closed.py -v
       - name: Full load gate regression (offline)
         run: python -m unittest discover -s tests -p test_load_snapshot_gate.py -v
+      - name: OF reporting contracts and risks isolation
+        run: python -m unittest discover -s tests -p test_reporting_closed_of.py -v
