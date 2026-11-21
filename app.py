@@ -757,7 +757,7 @@ render_selection_home_directores()
 st.divider()
 st.subheader("RESUMEN PROYECTOS")
 c1, c2 = st.columns(2)
-c1.metric("Horas concedidas", f"{granted:,.1f} h")
+c1.metric("Horas concedidas", "—" if granted is None else f"{granted:,.1f} h")
 c2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
 
 chart_df = filtered_projects[["project_code", "hours_granted", "hours_incurred"]].copy()
