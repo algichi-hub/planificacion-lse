@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -59,6 +60,26 @@ class LoadGateTests(unittest.TestCase):
         return validate(self.hours, self.projects, self.of, self.bonus, "422",
                         self.zip, snapshot_date=date,
                         closed_file=self.closed, source_file=self.source)
+
+    def test_cli_validate_only_without_database_dependencies(self):
+        """Real CLI must validate offline without psycopg or python-dotenv installed."""
+        scripts = Path(__file__).resolve().parents[1] / "scripts"
+        args = [
+            sys.executable, "-S", str(scripts / "import_erp.py"),
+            "--hours", str(self.hours),
+            "--closed", str(self.closed),
+            "--source-text", str(self.source),
+            "--projects", str(self.projects),
+            "--of-text", str(self.of),
+            "--bonus-text", str(self.bonus),
+            "--prepared-zip", str(self.zip),
+            "--ct", "422",
+            "--snapshot-date", "2026-11-21",
+            "--validate-only",
+        ]
+        result = subprocess.run(args, capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("VALIDATE ONLY: sin conexión", result.stdout)
 
     def test_all_six_inputs_and_indexes_pass(self):
         result = self.gate()
