@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import zipfile
 from datetime import date
 from decimal import Decimal
@@ -22,6 +23,12 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
     with zipfile.ZipFile(prepared_zip) as z:
         bonus_rows = read_index(z, "indice_bono_ct.csv")
         closed_rows = read_index(z, "indice_of_cerradas.csv")
+        source_descriptions = read_index(z, "indice_of_cerradas_descripciones.csv")
+        hashes = json.loads(z.read("manifiesto.json"))["source_files_sha256"]
+        source_name = next((name for name in hashes if name.lower() == "ooff_texto.csv"), None)
+        if source_name is None:
+            raise ValueError("No consta hash del fichero de textos ERP")
+        source_digest = hashes[source_name]
 
     # Seed known historical relationships before adding the current export.
     # A contradictory legacy CT is an error, never an implicit overwrite.
@@ -165,10 +172,19 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
             GROUP BY f.order_number
         ) p ON p.order_number = c.order_number
     """, (snapshot, closed_hash))
+    # Rebuild only snapshot source descriptions, never user-validated manual descriptions.
+    cur.execute("DELETE FROM closed_of_source_descriptions WHERE snapshot_date = %s", (snapshot,))
+    cur.executemany("""
+        INSERT INTO closed_of_source_descriptions
+            (snapshot_date, order_number, source_description, source_file_hash)
+        VALUES (%s, %s, %s, %s)
+    """, [(snapshot, row["OF numero"], row["Descripcion origen"], source_digest)
+           for row in source_descriptions])
     rows = cur.execute("""
         SELECT attribution_status, COUNT(*) FROM closed_of_hours
         WHERE snapshot_date = %s GROUP BY attribution_status
     """, (snapshot,)).fetchall()
     return {"bonuses_in_source": len(bonus_rows),
+            "closed_source_descriptions": len(source_descriptions),
             "closed_of": len(closed_rows),
             **{status: count for status, count in rows}}
