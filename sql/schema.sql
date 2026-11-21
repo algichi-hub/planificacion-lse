@@ -171,3 +171,40 @@ CREATE OR REPLACE VIEW v_closed_of_hours AS
 SELECT snapshot_date, order_number, project_code, work_center,
        hours_incurred, attribution_status
 FROM closed_of_hours;
+
+-- Explicit user-approved attribution of historical OFs; never inferred from bonuses.
+-- The importer reapplies these mappings on every future snapshot.
+CREATE TABLE IF NOT EXISTS closed_of_manual_assignments (
+    order_number TEXT PRIMARY KEY CHECK (order_number ~ '^[0-9]{6}$'),
+    project_code TEXT NOT NULL REFERENCES projects(project_code),
+    work_center TEXT NOT NULL,
+    justification TEXT NOT NULL CHECK (btrim(justification) <> ''),
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- An OF's definitive hours are authoritative at OF grain, never distributed to bonuses.
+-- Nothing is reported for closed OFs without both an explicit/verified project and CT.
+CREATE OR REPLACE VIEW v_reporting_of_hours AS
+SELECT f.snapshot_date, f.project_code, f.work_center, f.order_number,
+       MAX(f.order_description) AS order_description,
+       MAX(f.order_status) AS order_status,
+       SUM(f.hours_granted) AS hours_granted,
+       SUM(f.hours_incurred) AS hours_incurred,
+       SUM(f.hours_pending) AS hours_pending,
+       'OPERATIVE'::TEXT AS hours_source
+FROM fact_hours f
+GROUP BY f.snapshot_date, f.project_code, f.work_center, f.order_number
+UNION ALL
+SELECT c.snapshot_date, c.project_code, c.work_center, c.order_number,
+       'OF cerrada'::TEXT AS order_description,
+       'Cerrad'::TEXT AS order_status,
+       NULL::NUMERIC AS hours_granted,
+       c.hours_incurred,
+       NULL::NUMERIC AS hours_pending,
+       'CLOSED_OF'::TEXT AS hours_source
+FROM closed_of_hours c
+WHERE c.project_code IS NOT NULL AND c.work_center IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM fact_hours f
+      WHERE f.snapshot_date = c.snapshot_date AND f.order_number = c.order_number
+  );
