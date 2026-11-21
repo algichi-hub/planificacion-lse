@@ -87,7 +87,7 @@ def inspect_erp_sources(hours: Path, closed: Path):
             raise ValueError(f'Operación no numérica en línea {line_no}: {op!r}') from exc
         if not 0 <= operation <= 9999:
             raise ValueError(f'Operación fuera de rango en línea {line_no}: {op!r}')
-        if not re.fullmatch(r'\\d{6}', order):
+        if not re.fullmatch(r'\d{6}', order):
             raise ValueError(f'OF con bono de longitud inesperada en línea {line_no}: {order!r}')
         bonus = f'{order}{operation:04d}'
         if bonus in bonus_ct and bonus_ct[bonus] != ct:
@@ -104,7 +104,7 @@ def inspect_erp_sources(hours: Path, closed: Path):
         if row.get('ESTATU', '').strip() != 'Cerrad':
             continue
         order = normalized_order(row.get('O_FABR', ''))
-        if not re.fullmatch(r'\\d{6}', order):
+        if not re.fullmatch(r'\d{6}', order):
             raise ValueError(f'OF cerrada inválida en línea {line_no}: {order!r}')
         if order in closed_orders:
             raise ValueError(f'OF cerrada duplicada: {order}')
@@ -252,12 +252,12 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
         order, pos = operations[bonus_id]
         bono_writer.writerow([bonus_id, order, pos])
     registry_idx = io.StringIO(newline='')
-    registry_writer = csv.writer(registry_idx, delimiter=';', lineterminator='\\r\\n')
+    registry_writer = csv.writer(registry_idx, delimiter=';', lineterminator='\r\n')
     registry_writer.writerow(['Bono numero', 'Ct.'])
     for bonus_id, bonus_ct_value in sorted(bonus_ct.items()):
         registry_writer.writerow([bonus_id, bonus_ct_value])
     closed_idx = io.StringIO(newline='')
-    closed_writer = csv.writer(closed_idx, delimiter=';', lineterminator='\\r\\n')
+    closed_writer = csv.writer(closed_idx, delimiter=';', lineterminator='\r\n')
     closed_writer.writerow(['OF numero', 'H_INV_TOT_'])
     for order, hours_total in sorted(closed_orders.items()):
         closed_writer.writerow([order, hours_total])
