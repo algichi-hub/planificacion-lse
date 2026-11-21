@@ -93,7 +93,9 @@ CREATE TABLE IF NOT EXISTS closed_of_manual_assignments (
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- An OF's definitive hours are authoritative at OF grain, never distributed to bonuses.
+-- A closed OF is 100% consumed: reporting grants equal definitive incurred hours.
+-- Raw ERP source hours remain unchanged and are never distributed to bonuses.
+-- Previous snapshots are not backfilled; closed totals apply only on their dated rows.
 -- Nothing is reported for closed OFs without both an explicit/verified project and CT.
 CREATE OR REPLACE VIEW v_reporting_of_hours AS
 SELECT f.snapshot_date, f.project_code, f.work_center, f.order_number,
@@ -109,9 +111,9 @@ UNION ALL
 SELECT c.snapshot_date, c.project_code, c.work_center, c.order_number,
        'OF cerrada'::TEXT AS order_description,
        'Cerrad'::TEXT AS order_status,
-       NULL::NUMERIC AS hours_granted,
+       c.hours_incurred AS hours_granted,
        c.hours_incurred,
-       NULL::NUMERIC AS hours_pending,
+       0::NUMERIC AS hours_pending,
        'CLOSED_OF'::TEXT AS hours_source
 FROM closed_of_hours c
 WHERE c.project_code IS NOT NULL AND c.work_center IS NOT NULL
