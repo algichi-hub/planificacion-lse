@@ -14,6 +14,7 @@ import io
 import json
 import re
 import zipfile
+from decimal import Decimal, InvalidOperation
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -65,6 +66,62 @@ def select_of(hours: Path, ct: str):
     return selected, operations, projects, hours_rows
 
 
+
+def inspect_erp_sources(hours: Path, closed: Path):
+    """Valida los cierres y captura todas las relaciones bono-Ct, sin filtrar por Ct."""
+    lines = read_pipe(hours)
+    headers, _ = next(lines)
+    required = {'Orden', 'Opr.', 'Ct.'}
+    if not required.issubset(headers):
+        raise ValueError(f'Faltan columnas de horas: {sorted(required-set(headers))}')
+    operational_orders, bonus_ct = set(), {}
+    for line_no, row in lines:
+        order = normalized_order(row.get('Orden', ''))
+        operational_orders.add(order)
+        op, ct = row.get('Opr.', '').strip(), row.get('Ct.', '').strip()
+        if not op or not ct:
+            continue
+        try:
+            operation = int(op)
+        except ValueError as exc:
+            raise ValueError(f'Operación no numérica en línea {line_no}: {op!r}') from exc
+        if not 0 <= operation <= 9999:
+            raise ValueError(f'Operación fuera de rango en línea {line_no}: {op!r}')
+        if not re.fullmatch(r'\\d{6}', order):
+            raise ValueError(f'OF con bono de longitud inesperada en línea {line_no}: {order!r}')
+        bonus = f'{order}{operation:04d}'
+        if bonus in bonus_ct and bonus_ct[bonus] != ct:
+            raise ValueError(f'Bono {bonus} con CT contradictorios: {bonus_ct[bonus]} / {ct}')
+        bonus_ct[bonus] = ct
+
+    lines = read_pipe(closed)
+    headers, _ = next(lines)
+    required = {'O_FABR', 'ESTATU', 'H_INV_TOT_'}
+    if not required.issubset(headers):
+        raise ValueError(f'Faltan columnas de OF cerradas: {sorted(required-set(headers))}')
+    closed_orders = {}
+    for line_no, row in lines:
+        if row.get('ESTATU', '').strip() != 'Cerrad':
+            continue
+        order = normalized_order(row.get('O_FABR', ''))
+        if not re.fullmatch(r'\\d{6}', order):
+            raise ValueError(f'OF cerrada inválida en línea {line_no}: {order!r}')
+        if order in closed_orders:
+            raise ValueError(f'OF cerrada duplicada: {order}')
+        raw = row.get('H_INV_TOT_', '').strip()
+        normalized = raw.replace('.', '').replace(',', '.') if ',' in raw else raw
+        try:
+            hours_total = Decimal(normalized)
+        except InvalidOperation as exc:
+            raise ValueError(f'H_INV_TOT_ no numérico para OF {order}: {raw!r}') from exc
+        if not hours_total.is_finite():
+            raise ValueError(f'H_INV_TOT_ no finito para OF {order}')
+        closed_orders[order] = format(hours_total, '.4f')
+    overlap = sorted(operational_orders.intersection(closed_orders))
+    if overlap:
+        raise ValueError(f'OF presentes en horas y cerradas ({len(overlap)}): {", ".join(overlap[:50])}')
+    return bonus_ct, closed_orders
+
 def check_projects(projects: Path):
     lines = read_pipe(projects)
     header, _ = next(lines)
@@ -73,12 +130,14 @@ def check_projects(projects: Path):
     return {r.get('Proyecto', '').strip() for _, r in lines if r.get('Proyecto', '').strip()}
 
 
-def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, snapshot_date: str):
-    for p in (hours, projects, source):
+def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, snapshot_date: str, closed: Path | None = None):
+    inputs = (hours, projects, source) + ((closed,) if closed is not None else ())
+    for p in inputs:
         if not p.is_file():
             raise FileNotFoundError(str(p))
-    if output.resolve() in {p.resolve() for p in (hours,projects,source)}:
+    if output.resolve() in {p.resolve() for p in inputs}:
         raise ValueError('La salida no puede sobrescribir ninguna entrada')
+    bonus_ct, closed_orders = inspect_erp_sources(hours, closed) if closed is not None else ({}, {})
     selected, operations, project_codes, hours_rows = select_of(hours, ct)
     master_projects = check_projects(projects)
     missing_projects = sorted(project_codes - master_projects - {''})
@@ -180,7 +239,7 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
     missing = sorted(selected - set(grouped))
     # Una OF sin expediente de textos sigue siendo una OF válida del ERP.
     # Se genera un JSON vacío y marcado explícitamente para interpretación LLM.
-    hashes = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (hours,projects,source)}
+    hashes = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
     output.parent.mkdir(parents=True, exist_ok=True)
     temp = output.with_name(output.name+'.tmp')
     idx = io.StringIO()
@@ -192,6 +251,16 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
     for bonus_id in sorted(operations):
         order, pos = operations[bonus_id]
         bono_writer.writerow([bonus_id, order, pos])
+    registry_idx = io.StringIO(newline='')
+    registry_writer = csv.writer(registry_idx, delimiter=';', lineterminator='\\r\\n')
+    registry_writer.writerow(['Bono numero', 'Ct.'])
+    for bonus_id, bonus_ct_value in sorted(bonus_ct.items()):
+        registry_writer.writerow([bonus_id, bonus_ct_value])
+    closed_idx = io.StringIO(newline='')
+    closed_writer = csv.writer(closed_idx, delimiter=';', lineterminator='\\r\\n')
+    closed_writer.writerow(['OF numero', 'H_INV_TOT_'])
+    for order, hours_total in sorted(closed_orders.items()):
+        closed_writer.writerow([order, hours_total])
     try:
         with zipfile.ZipFile(temp, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             for order in sorted(selected):
@@ -212,6 +281,8 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                         'hours_records_selected':hours_rows,
                         'unique_of_selected':len(selected),
                         'unique_bonuses_selected':len(operations),
+                        'closed_of_count':len(closed_orders),
+                        'bonus_ct_registry_count':len(bonus_ct),
                         'source_lines_selected':issues['selected_source_lines'],
                         'selected_embedded_pipe_rows':issues['selected_embedded_pipes'],
                         'source_lines_total':issues['source_lines_total'],
@@ -220,6 +291,9 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                         'note':'Todas las OF seleccionadas tienen JSON. Si missing_in_ooff_texto es true, el LLM debe escribir exactamente ### SIN DATOS ### para la OF y sus bonos. POS de otros Ct. se preservan para dar contexto.'}
             z.writestr('indice_of.csv',idx.getvalue().encode('utf-8-sig'))
             z.writestr('indice_bonos.csv', bono_idx.getvalue().encode('utf-8-sig'))
+            if closed is not None:
+                z.writestr('indice_bono_ct.csv', registry_idx.getvalue().encode('utf-8-sig'))
+                z.writestr('indice_of_cerradas.csv', closed_idx.getvalue().encode('utf-8-sig'))
             z.writestr('manifiesto.json',json.dumps(manifest, ensure_ascii=False,indent=2))
         with zipfile.ZipFile(temp) as z:
             if z.testzip() is not None: raise ValueError('ZIP generado incorrectamente')
@@ -230,6 +304,15 @@ def prepare(hours: Path, projects: Path, source: Path, output: Path, ct: str, sn
                     io.TextIOWrapper(bonus_file, encoding='utf-8-sig', newline=''),
                     delimiter=';'
                 ))
+            if closed is not None:
+                with z.open('indice_bono_ct.csv') as fp:
+                    registry_rows = list(csv.DictReader(io.TextIOWrapper(fp, encoding='utf-8-sig'), delimiter=';'))
+                with z.open('indice_of_cerradas.csv') as fp:
+                    closed_rows = list(csv.DictReader(io.TextIOWrapper(fp, encoding='utf-8-sig'), delimiter=';'))
+                if {r['Bono numero']: r['Ct.'] for r in registry_rows} != bonus_ct or len(registry_rows) != len(bonus_ct):
+                    raise ValueError('Índice de bono-CT incorrecto')
+                if {r['OF numero']: r['H_INV_TOT_'] for r in closed_rows} != closed_orders or len(closed_rows) != len(closed_orders):
+                    raise ValueError('Índice de OF cerradas incorrecto')
             if len(bonus_rows) != len(operations):
                 raise ValueError('El índice no contiene todos los bonos')
             indexed_bonuses = {row['Bono numero'] for row in bonus_rows}
@@ -260,9 +343,10 @@ def main():
     parser.add_argument('--hours',required=True,type=Path)
     parser.add_argument('--projects',required=True,type=Path)
     parser.add_argument('--ooff-texto',required=True,type=Path)
+    parser.add_argument('--closed',required=True,type=Path)
     parser.add_argument('--output',required=True,type=Path)
     parser.add_argument('--snapshot-date',required=True)
     args=parser.parse_args()
-    print(json.dumps(prepare(args.hours,args.projects,args.ooff_texto,args.output,args.ct,args.snapshot_date),ensure_ascii=False,indent=2))
+    print(json.dumps(prepare(args.hours,args.projects,args.ooff_texto,args.output,args.ct,args.snapshot_date,args.closed),ensure_ascii=False,indent=2))
 
 if __name__=='__main__': main()
