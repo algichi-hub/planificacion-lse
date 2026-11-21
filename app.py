@@ -346,6 +346,11 @@ if view == "risks":
           AND p.project_manager IN ({manager_placeholders})
           AND p.status IN ({status_placeholders})
           AND f.bonus_id IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM closed_of_hours c
+              WHERE c.snapshot_date = f.snapshot_date
+                AND c.order_number = f.order_number
+          )
         GROUP BY f.project_code, f.order_number, f.bonus_id
         """,
         (snapshot, *selected_centers, *selected_managers, *selected_statuses),
