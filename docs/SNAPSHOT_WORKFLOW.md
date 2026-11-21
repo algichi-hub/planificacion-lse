@@ -27,8 +27,8 @@ python -m unittest discover -s tests -p test_load_snapshot_gate.py -v
 
 - La atribución manual aprobada de las OF `967341` y `967342` se conserva en `closed_of_manual_assignments` con proyecto `PZ7CUR` y centro `422`. El maestro del proyecto procede del ERP y su grupo/director es `500084 PIZARRO 7ª MODIFICACION`.
 - `v_reporting_of_hours` agrega operaciones a nivel OF y añade cada OF cerrada **una sola vez**. `v_project_hours` y `v_order_hours` reutilizan la vista. El total conocido del 21/11/2026 es **3.000,6518 horas** de dos OF, sin atribución a bonos.
-- Home, EAC y el indicador de incurridas ERP de POE leen esta fuente de nivel OF. **Riesgos y el detalle de bonos siguen leyendo exclusivamente `fact_hours`**. Las concedidas, pendientes y porcentajes de OF cerradas sin desglose no son cero: se consideran desconocidos.
-- La asignación manual se vuelve a aplicar en futuras cargas y la importación se bloquea si nuevos bonos ERP contradicen un centro asignado manualmente. No modifica snapshots anteriores.
+- Home, EAC y el indicador de incurridas ERP de POE leen esta fuente de nivel OF. **Riesgos y el detalle de bonos siguen leyendo exclusivamente `fact_hours`**. Para las OF cerradas, las concedidas de reporting se igualan al incurrido definitivo de la OF, el pendiente es 0 y el consumo 100 % si el total es positivo. Las horas por bono cerrado continúan desconocidas y no se reparten.
+- La asignación manual se vuelve a aplicar en futuras cargas y la importación se bloquea si nuevos bonos ERP contradicen un centro asignado manualmente. Se bloquean también las OF simultáneamente operativas/cerradas en un snapshot y las reaperturas sin conciliación para evitar perder horas o presentar un estado ambiguo. No modifica snapshots anteriores.
 - La visualización y exportación siguen el formato decimal de la aplicación; la precisión numérica del cierre en Neon es `NUMERIC(18,4)`.
 - La aplicación de producción permanece en `main` y no debe apuntar a esta base `development` mientras se verifica el cambio.
 
