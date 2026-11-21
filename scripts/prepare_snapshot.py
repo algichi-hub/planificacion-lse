@@ -76,6 +76,8 @@ def inspect_erp_sources(hours: Path, closed: Path):
         raise ValueError(f'Faltan columnas de horas: {sorted(required-set(headers))}')
     operational_orders, bonus_ct = set(), {}
     for line_no, row in lines:
+        if not any(row.values()):
+            continue  # Separadores vacíos del informe ERP
         order = normalized_order(row.get('Orden', ''))
         operational_orders.add(order)
         op, ct = row.get('Opr.', '').strip(), row.get('Ct.', '').strip()
@@ -101,6 +103,8 @@ def inspect_erp_sources(hours: Path, closed: Path):
         raise ValueError(f'Faltan columnas de OF cerradas: {sorted(required-set(headers))}')
     closed_orders = {}
     for line_no, row in lines:
+        if not any(row.values()):
+            continue  # Separadores vacíos del informe ERP
         if row.get('ESTATU', '').strip() != 'Cerrad':
             continue
         order = normalized_order(row.get('O_FABR', ''))
