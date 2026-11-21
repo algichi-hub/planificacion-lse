@@ -277,16 +277,16 @@ def main() -> None:
             if unmatched:
                 raise ValueError(f'Hay {unmatched} proyectos sin correspondencia en maestro; rollback')
 
-            for csv_path, values in ((args.of_text, validated.of_text),
-                                     (args.bonus_text, validated.bonus_text),
-                                     (args.closed, {str(i): None for i in range(closed_result['closed_of'])}),
-                                     (args.source_text, {})):
+            for csv_path, count in ((args.of_text, len(validated.of_text)),
+                                    (args.bonus_text, len(validated.bonus_text)),
+                                    (args.closed, closed_result['closed_of']),
+                                    (args.source_text, 0)):
                 cur.execute(
                     '''INSERT INTO imports (snapshot_date, source_name, file_hash, row_count)
                        VALUES (%s,%s,%s,%s)
                        ON CONFLICT (snapshot_date, source_name) DO UPDATE SET
                        file_hash = EXCLUDED.file_hash, row_count = EXCLUDED.row_count, loaded_at=NOW()''',
-                    (snapshot, csv_path.name, file_hash(csv_path), len(values)),
+                    (snapshot, csv_path.name, file_hash(csv_path), count),
                 )
 
             totals = cur.execute(
