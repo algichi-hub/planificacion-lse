@@ -25,10 +25,10 @@ python -m unittest discover -s tests -p test_load_snapshot_gate.py -v
 
 ## Resumen del proceso
 
-1. Exportar los tres ficheros ERP a `data/`.
+1. Exportar los cuatro ficheros ERP a `entrada/`.
 2. Preparar expedientes mediante `pre_snapshot.ps1 -Ct 422`. **No escribe en Neon**.
 3. Interpretar el ZIP resultante con el agente LLM, generando los dos CSV de descripciones.
-4. Guardar los CSV interpretados en `data/`.
+4. Guardar los CSV interpretados en `entrada/`.
 5. Ejecutar `load_snapshot.ps1 -Ct 422 -ValidateOnly`. **Sin conexión ni escritura en Neon**.
 6. Revisar el resultado y solo entonces ejecutar `load_snapshot.ps1 -Ct 422`. **Este paso escribe en Neon**.
 
@@ -38,20 +38,21 @@ python -m unittest discover -s tests -p test_load_snapshot_gate.py -v
 
 | Archivo | Uso |
 |---|---|
-| `data/OOFF_OP_Planif_Terminada.txt` | ERP horas; permite filtrar operaciones por `Ct.` y formar bonos |
-| `data/Proyectos_Sevilla.csv` | Maestro de proyectos |
-| `data/ooff_texto.csv` | Textos internos originales del ERP (solo preparación) |
+| `entrada/OOFF_OP_Planif_Terminada.txt` | ERP horas; permite filtrar operaciones por `Ct.` y formar bonos |
+| `entrada/Proyectos_Sevilla.csv` | Maestro de proyectos |
+| `entrada/ooff_texto.csv` | Textos internos originales del ERP (solo preparación) |
+| `entrada/OOFFCerradasMO.txt` | OF cerradas y horas totales incurridas |
 
 El CSV de textos sin comprimir acepta **dos formatos de exportación ERP**: el CSV tabular con cabeceras `Orden|Articulo|...|Texto|...`, y el informe paginado `ÓRDENES DE FABRICACIÓN POR NÚMERO DE ORDEN` con textos multilínea en recuadros. El preparador lee directamente el CSV y detecta el formato y conserva las líneas de los expedientes seleccionados; no intenta aplicar `parse_line` de 14 columnas al informe paginado. Los formatos no reconocidos siguen siendo errores, y las OF sin correspondencia se marcan `### SIN DATOS ###`.
 | `data/ooff_texto_consolidado.zip` | Salida de preparación; JSON por OF, manifiesto, `indice_of.csv` e `indice_bonos.csv` |
-| `data/ooff_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
-| `data/bono_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
+| `entrada/ooff_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
+| `entrada/bono_texto_interpretado.csv` | Salida LLM, obligatoria para carga |
 
 Los archivos `data/*.zip`, `data/*.csv` y `data/*.txt` se excluyen del repositorio mediante `.gitignore`.
 
 ## 1. Preparación: pre_snapshot.ps1
 
-El fichero de textos original se guarda **sin comprimir**, con nombre `data/ooff_texto.csv`. No es necesario crear un ZIP. La salida para el agente LLM **sí** sigue siendo `data/ooff_texto_consolidado.zip`. Para comprobar sintaxis antes de ejecutar: `python -m py_compile .\scripts\prepare_snapshot.py`.
+El fichero de textos original se guarda **sin comprimir**, con nombre `entrada/ooff_texto.csv`. No es necesario crear un ZIP. La salida para el agente LLM **sí** sigue siendo `data/ooff_texto_consolidado.zip`. Para comprobar sintaxis antes de ejecutar: `python -m py_compile .\scripts\prepare_snapshot.py`.
 
 
 ```powershell
@@ -65,9 +66,10 @@ Parámetros:
 |---|---|---|
 | `-Ct` | Obligatorio | Centro de trabajo a seleccionar |
 | `-SnapshotDate` | Fecha Windows (yyyy-MM-dd) | Fecha indicada en el manifiesto |
-| `-HoursFile` | `data/OOFF_OP_Planif_Terminada.txt` | Export de horas |
-| `-ProjectsFile` | `data/Proyectos_Sevilla.csv` | Maestro |
-| `-OoffTextoFile` | `data/ooff_texto.csv` | Texto ERP original |
+| `-HoursFile` | `entrada/OOFF_OP_Planif_Terminada.txt` | Export de horas |
+| `-ProjectsFile` | `entrada/Proyectos_Sevilla.csv` | Maestro |
+| `-OoffTextoFile` | `entrada/ooff_texto.csv` | Texto ERP original |
+| `-ClosedFile` | `entrada/OOFFCerradasMO.txt` | OF cerradas |
 | `-OutputFile` | `data/ooff_texto_consolidado.zip` | ZIP destino |
 | `-Help` | — | Muestra la ayuda sin procesar datos |
 
@@ -108,15 +110,15 @@ Parámetros:
 |---|---|---|
 | `-Ct` | Obligatorio | Centro cuyas horas se importarán |
 | `-SnapshotDate` | Fecha Windows (yyyy-MM-dd) | Fecha del snapshot |
-| `-HoursFile` | `data/OOFF_OP_Planif_Terminada.txt` | Export ERP de horas |
-| `-ProjectsFile` | `data/Proyectos_Sevilla.csv` | Maestro ERP |
-| `-OfTextFile` | `data/ooff_texto_interpretado.csv` | Interpretación OF |
-| `-BonusTextFile` | `data/bono_texto_interpretado.csv` | Interpretación bonos |
+| `-HoursFile` | `entrada/OOFF_OP_Planif_Terminada.txt` | Export ERP de horas |
+| `-ProjectsFile` | `entrada/Proyectos_Sevilla.csv` | Maestro ERP |
+| `-OfTextFile` | `entrada/ooff_texto_interpretado.csv` | Interpretación OF |
+| `-BonusTextFile` | `entrada/bono_texto_interpretado.csv` | Interpretación bonos |
 | `-PreparedZip` | `data/ooff_texto_consolidado.zip` | ZIP preparado; usado para verificar índices, centro, fecha y hashes si existe |
 | `-ValidateOnly` | Desactivado | Validación local sin escritura ni conexión a Neon |
 | `-Help` | — | Ayuda sin conexión ni escritura |
 
-El proceso valida los cuatro ficheros obligatorios, cabeceras, formato CSV, descripciones no vacías, claves únicas y cobertura exacta de OF y bonos del centro. Si el ZIP preparado está disponible, se compara su manifiesto, índices, hashes de horas y proyectos y fecha de preparación. Ante un fallo, la carga no se inicia.
+El proceso valida los seis ficheros obligatorios, cabeceras, formato CSV, descripciones no vacías, claves únicas y cobertura exacta de OF y bonos del centro. Si el ZIP preparado está disponible, se compara su manifiesto, índices, hashes de horas y proyectos y fecha de preparación. Ante un fallo, la carga no se inicia.
 
 **Importante:** aunque la fecha tiene valor predeterminado, si se preparó el ZIP otro día y se ejecuta la carga más tarde, indicar a ambos scripts la **misma fecha** con `-SnapshotDate`, o regenerar el ZIP antes de validar.
 
@@ -147,7 +149,7 @@ No compartir nunca `DATABASE_URL` ni otras credenciales.
 
 ```powershell
 cd C:\Users\algic\Projects\planificacion-lse
-git pull --ff-only origin v0/sql-dashboard
+git pull --ff-only origin feature/closed-of-importer
 
 .\scripts\pre_snapshot.ps1 -Ct 422
 # Adjuntar data/ooff_texto_consolidado.zip al agente y guardar ambos CSV en data/
