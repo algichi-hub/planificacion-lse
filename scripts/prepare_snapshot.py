@@ -116,6 +116,8 @@ def inspect_erp_sources(hours: Path, closed: Path):
             raise ValueError(f'H_INV_TOT_ no numérico para OF {order}: {raw!r}') from exc
         if not hours_total.is_finite():
             raise ValueError(f'H_INV_TOT_ no finito para OF {order}')
+        if hours_total != hours_total.quantize(Decimal('0.0001')):
+            raise ValueError(f'H_INV_TOT_ supera 4 decimales para OF {order}: {raw!r}')
         closed_orders[order] = format(hours_total, '.4f')
     overlap = sorted(operational_orders.intersection(closed_orders))
     if overlap:
