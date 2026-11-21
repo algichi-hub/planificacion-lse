@@ -93,6 +93,19 @@ CREATE TABLE IF NOT EXISTS closed_of_manual_assignments (
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- User-validated description is global to the closed OF and survives snapshot reloads.
+ALTER TABLE closed_of_manual_assignments
+    ADD COLUMN IF NOT EXISTS manual_description TEXT;
+
+-- ERP source label, preserved by snapshot independently of manual overrides.
+CREATE TABLE IF NOT EXISTS closed_of_source_descriptions (
+    snapshot_date DATE NOT NULL,
+    order_number TEXT NOT NULL,
+    source_description TEXT NOT NULL CHECK (btrim(source_description) <> ''),
+    source_file_hash TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, order_number)
+);
+
 -- A closed OF is 100% consumed: reporting grants equal definitive incurred hours.
 -- Raw ERP source hours remain unchanged and are never distributed to bonuses.
 -- Previous snapshots are not backfilled; closed totals apply only on their dated rows.
@@ -109,13 +122,19 @@ FROM fact_hours f
 GROUP BY f.snapshot_date, f.project_code, f.work_center, f.order_number
 UNION ALL
 SELECT c.snapshot_date, c.project_code, c.work_center, c.order_number,
-       'OF cerrada'::TEXT AS order_description,
+       COALESCE(NULLIF(BTRIM(od.of_detailed_description), ''),
+                NULLIF(BTRIM(a.manual_description), ''),
+                NULLIF(BTRIM(sd.source_description), ''),
+                'OF cerrada')::TEXT AS order_description,
        'Cerrad'::TEXT AS order_status,
        c.hours_incurred AS hours_granted,
        c.hours_incurred,
        0::NUMERIC AS hours_pending,
        'CLOSED_OF'::TEXT AS hours_source
 FROM closed_of_hours c
+LEFT JOIN closed_of_manual_assignments a ON a.order_number = c.order_number
+LEFT JOIN of_descriptions od ON od.snapshot_date = c.snapshot_date AND od.order_number = c.order_number
+LEFT JOIN closed_of_source_descriptions sd ON sd.snapshot_date = c.snapshot_date AND sd.order_number = c.order_number
 WHERE c.project_code IS NOT NULL AND c.work_center IS NOT NULL
   AND NOT EXISTS (
       SELECT 1 FROM fact_hours f
