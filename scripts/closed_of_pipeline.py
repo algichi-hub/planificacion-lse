@@ -168,12 +168,13 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
     """, (snapshot, closed_hash))
     # Rebuild only snapshot source descriptions, never user-validated manual descriptions.
     cur.execute("DELETE FROM closed_of_source_descriptions WHERE snapshot_date = %s", (snapshot,))
-    cur.executemany("""
-        INSERT INTO closed_of_source_descriptions
+    with cur.copy("""
+        COPY closed_of_source_descriptions
             (snapshot_date, order_number, source_description, source_file_hash)
-        VALUES (%s, %s, %s, %s)
-    """, [(snapshot, row["OF numero"], row["Descripcion origen"], source_hash)
-           for row in source_descriptions])
+        FROM STDIN
+    """) as cp:
+        for row in source_descriptions:
+            cp.write_row((snapshot, row["OF numero"], row["Descripcion origen"], source_hash))
     rows = cur.execute("""
         SELECT attribution_status, COUNT(*) FROM closed_of_hours
         WHERE snapshot_date = %s GROUP BY attribution_status
