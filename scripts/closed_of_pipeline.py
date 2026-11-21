@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import zipfile
 from datetime import date
 from decimal import Decimal
@@ -19,16 +18,11 @@ def read_index(z: zipfile.ZipFile, name: str) -> list[dict[str, str]]:
         return list(csv.DictReader(io.TextIOWrapper(stream, encoding="utf-8-sig", newline=""), delimiter=";"))
 
 
-def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: str) -> dict[str, int]:
+def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: str, source_hash: str) -> dict[str, int]:
     with zipfile.ZipFile(prepared_zip) as z:
         bonus_rows = read_index(z, "indice_bono_ct.csv")
         closed_rows = read_index(z, "indice_of_cerradas.csv")
         source_descriptions = read_index(z, "indice_of_cerradas_descripciones.csv")
-        hashes = json.loads(z.read("manifiesto.json"))["source_files_sha256"]
-        source_name = next((name for name in hashes if name.lower() == "ooff_texto.csv"), None)
-        if source_name is None:
-            raise ValueError("No consta hash del fichero de textos ERP")
-        source_digest = hashes[source_name]
 
     # Seed known historical relationships before adding the current export.
     # A contradictory legacy CT is an error, never an implicit overwrite.
@@ -178,7 +172,7 @@ def load_closed_pipeline(cur, prepared_zip: Path, snapshot: date, closed_hash: s
         INSERT INTO closed_of_source_descriptions
             (snapshot_date, order_number, source_description, source_file_hash)
         VALUES (%s, %s, %s, %s)
-    """, [(snapshot, row["OF numero"], row["Descripcion origen"], source_digest)
+    """, [(snapshot, row["OF numero"], row["Descripcion origen"], source_hash)
            for row in source_descriptions])
     rows = cur.execute("""
         SELECT attribution_status, COUNT(*) FROM closed_of_hours
