@@ -14,7 +14,7 @@ from poe_board import (
     restore_pending_cells, queue_action, visibility_changes, render,
     annual_evolution, director_eac, render_annual_chart, available_eac_snapshots,
     director_bar_sources, director_bar_frame, render_director_bars,
-    consecutive_months, eac_exhaustion, exhaustion_rows, render_exhaustion_table,
+    consecutive_months, consecutive_tail_count, eac_exhaustion, exhaustion_rows, render_exhaustion_table,
 )
 
 
@@ -47,6 +47,11 @@ class POEV5Tests(unittest.TestCase):
         self.assertFalse(consecutive_months([
             date(2026, 9, 1), date(2026, 11, 1), date(2026, 12, 1)]))
         self.assertFalse(consecutive_months([date(2026, 11, 1), date(2026, 12, 1)]))
+
+    def test_gapped_three_months_are_not_counted_as_complete(self):
+        periods = [date(2026, 7, 1), date(2026, 9, 1), date(2026, 10, 1)]
+        self.assertEqual(consecutive_tail_count(periods), 2)
+        self.assertEqual(consecutive_tail_count([]), 0)
 
     def test_exhaustion_two_source_rates_and_zero_is_real(self):
         data = {"directors": {"A": "DIRECTOR"},
