@@ -53,43 +53,60 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(consecutive_tail_count(periods), 2)
         self.assertEqual(consecutive_tail_count([]), 0)
 
-    def test_exhaustion_uses_poe_real_only_including_zero(self):
-        data = {"directors": {"A": "DIRECTOR"},
-                "hours": {("A", date(2026, 8, 1)): (Decimal(0), Decimal(900)),
-                          ("A", date(2026, 9, 1)): (Decimal(100), Decimal(900)),
-                          ("A", date(2026, 10, 1)): (Decimal(200), Decimal(900)),
-                          ("A", date(2026, 11, 1)): (None, Decimal(900))},
-                "opening": {"A": Decimal(200)}, "opening_count": {"A": 1}}
-        rows = exhaustion_rows(data, 2026, "A", {"eac_hours": Decimal(1000)})
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["Fuente"], "POE real")
-        self.assertEqual(rows[0]["Meses disponibles"], "3/3 meses")
-        self.assertEqual(rows[0]["Último mes"], "Octubre 2026")
-        self.assertEqual(rows[0]["Ritmo (h/mes)"], 100)
-        self.assertEqual(rows[0]["Acumulado (h)"], 500)
-        self.assertEqual(rows[0]["Agotamiento EAC"], "Marzo 2027")
+    def test_three_independent_scenarios_use_exact_shifted_windows(self):
+        data = {"hours": {
+            ("A", date(2026, 6, 1)): (Decimal(10), None),
+            ("A", date(2026, 7, 1)): (Decimal(20), None),
+            ("A", date(2026, 8, 1)): (Decimal(30), None),
+            ("A", date(2026, 9, 1)): (Decimal(60), None),
+            ("A", date(2026, 10, 1)): (Decimal(90), Decimal(9000)),
+            ("A", date(2026, 11, 1)): (None, Decimal(9000)),
+        }, "opening": {"A": Decimal(300)}}
+        rows = exhaustion_rows(data, 2026, "A", {"eac_hours": 810})
+        self.assertEqual([r["Escenario"] for r in rows], ["E1", "E2", "E3"])
+        self.assertEqual([r["Ritmo (h/mes)"] for r in rows], [60, 110/3, 20])
+        self.assertEqual(rows[0]["Muestra POE real"], "AGO/26 · SEP/26 · OCT/26")
+        self.assertEqual(rows[1]["Muestra POE real"], "JUL/26 · AGO/26 · SEP/26")
+        self.assertEqual(rows[2]["Muestra POE real"], "JUN/26 · JUL/26 · AGO/26")
+        # All scenarios start with the same accumulated 510 h at N=Oct.
+        self.assertEqual([r["Agotamiento EAC"] for r in rows],
+                         ["Marzo 2027", "Julio 2027", "Enero 2028"])
 
-    def test_exhaustion_incomplete_still_displays_data(self):
-        data = {"hours": {("A", date(2026, 10, 1)): (Decimal(10), None),
-                          ("A", date(2026, 11, 1)): (Decimal(20), None)}}
-        with patch("poe_board.st.dataframe") as table, \
-             patch("poe_board.st.caption"), patch("poe_board.st.markdown"), \
-             patch("poe_board.connect") as connect:
-            render_exhaustion_table("url", data, 2026, "A",
-                                    {"year": 2026, "quarter": 3, "eac_hours": 100})
-        connect.assert_not_called()
-        table.assert_called_once()
-        frame = table.call_args.args[0]
-        self.assertEqual(frame["Meses disponibles"].tolist(), ["2/3 meses"])
-        self.assertEqual(frame["Acumulado (h)"].tolist(), [30])
-        self.assertEqual(frame["Agotamiento EAC"].tolist(),
-                         ["No se dispone de suficientes datos"])
+    def test_missing_month_does_not_block_other_scenarios(self):
+        data = {"hours": {
+            ("A", date(2026, 6, 1)): (Decimal(10), None),
+            ("A", date(2026, 7, 1)): (Decimal(20), None),
+            ("A", date(2026, 8, 1)): (None, Decimal(777)),
+            ("A", date(2026, 9, 1)): (Decimal(30), None),
+            ("A", date(2026, 10, 1)): (Decimal(40), None),
+        }, "opening": {}, "opening_count": {}}
+        rows = exhaustion_rows(data, 2026, "A", {"eac_hours": 200})
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(r["Agotamiento EAC"] ==
+                            "No se dispone de suficientes datos" for r in rows))
+        data["hours"][("A", date(2026, 8, 1))] = (Decimal(0), None)
+        rows = exhaustion_rows(data, 2026, "A", {"eac_hours": 200})
+        self.assertEqual([r["Agotamiento EAC"] for r in rows],
+                         ["Enero 2027", "Junio 2027", "Enero 2028"])
 
-    def test_exhaustion_renders_table_only_without_queries(self):
+    def test_each_scenario_has_independent_horizon_outcome(self):
+        data = {"hours": {
+            ("A", date(2026, 6, 1)): (Decimal(0), None),
+            ("A", date(2026, 7, 1)): (Decimal(0), None),
+            ("A", date(2026, 8, 1)): (Decimal(0), None),
+            ("A", date(2026, 9, 1)): (Decimal(30), None),
+            ("A", date(2026, 10, 1)): (Decimal(60), None),
+        }}
+        rows = exhaustion_rows(data, 2026, "A", {"eac_hours": 300})
+        self.assertEqual(rows[0]["Agotamiento EAC"], "Mayo 2027")
+        self.assertEqual(rows[1]["Agotamiento EAC"], "Julio 2028")
+        self.assertEqual(rows[2]["Agotamiento EAC"],
+                         "El periodo excede de lo previsto")
+
+    def test_exhaustion_shows_only_requested_columns_without_new_queries(self):
         data = {"hours": {("A", date(2026, 10, 1)): (Decimal(10), None),
                           ("A", date(2026, 11, 1)): (Decimal(20), None),
-                          ("A", date(2026, 12, 1)): (Decimal(30), None)},
-                "opening": {"A": None}, "opening_count": {"A": 0}}
+                          ("A", date(2026, 12, 1)): (Decimal(30), None)}}
         with patch("poe_board.st.dataframe") as table, \
              patch("poe_board.st.plotly_chart") as plot, \
              patch("poe_board.st.markdown"), patch("poe_board.st.caption"), \
@@ -100,19 +117,13 @@ class POEV5Tests(unittest.TestCase):
         table.assert_called_once()
         plot.assert_not_called()
         frame = table.call_args.args[0]
+        self.assertEqual(len(frame), 3)
         self.assertEqual(list(frame.columns),
-                         ["Fuente", "Meses disponibles", "Último mes",
-                          "Acumulado (h)", "Ritmo (h/mes)", "Agotamiento EAC"])
-        self.assertEqual(frame["Agotamiento EAC"].iloc[0], "Junio 2030")
-
-    def test_nonconsecutive_real_months_do_not_enable_forecast(self):
-        data = {"hours": {("A", date(2026, 7, 1)): (Decimal(10), None),
-                          ("A", date(2026, 9, 1)): (Decimal(20), None),
-                          ("A", date(2026, 10, 1)): (Decimal(30), None)},
-                "opening": {}, "opening_count": {}}
-        row = exhaustion_rows(data, 2026, "A", {"eac_hours": 100})[0]
-        self.assertEqual(row["Meses disponibles"], "2/3 meses")
-        self.assertEqual(row["Agotamiento EAC"], "No se dispone de suficientes datos")
+                         ["Escenario", "Muestra POE real",
+                          "Ritmo (h/mes)", "Agotamiento EAC"])
+        self.assertEqual(frame["Agotamiento EAC"].tolist(),
+                         ["Junio 2030", "No se dispone de suficientes datos",
+                          "No se dispone de suficientes datos"])
 
     def test_read_year_widget_defaults_to_selected_year(self):
         # Prevent Streamlit from implicitly defaulting to min_value=2000.
