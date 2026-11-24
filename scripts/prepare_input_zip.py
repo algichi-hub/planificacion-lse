@@ -54,7 +54,7 @@ def verify_zip_layout(archive: Path) -> None:
         if any(not (record.flag_bits & 1) or record.compress_type != 99
                for record in records):
             raise ValueError("Se exige que los cuatro ficheros estén cifrados con ZIP AES")
-        if any(not any(record.extra[pos:pos+2] == b"\\x01\\x99"
+        if any(not any(record.extra[pos:pos+2] == bytes((1, 153))
                        for pos in range(0, len(record.extra)-1))
                for record in records):
             # AES extra field 0x9901; scan permits other ZIP extras as well.
