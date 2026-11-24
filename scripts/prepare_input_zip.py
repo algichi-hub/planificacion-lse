@@ -82,7 +82,8 @@ def prepare(archive: Path, data_dir: Path, *, seven_zip: str | None = None, chec
             raise ValueError("No existe extracción validada. Ejecuta pre_snapshot.ps1 primero.")
         state = json.loads(manifest_path.read_text(encoding="utf-8"))
         if state.get("zip_sha256") != digest or not all(
-            (data_dir / name).is_file() and (data_dir / name).stat().st_size > 0
+            (data_dir / name).is_file()
+            and sha256(data_dir / name) == state.get("files_sha256", {}).get(name)
             for name in EXPECTED
         ):
             raise ValueError("Extracción incompleta u obsoleta. Ejecuta pre_snapshot.ps1 de nuevo.")
