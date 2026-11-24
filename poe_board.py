@@ -453,36 +453,6 @@ INSUFFICIENT = "No se dispone de suficientes datos"
 OUT_OF_RANGE = "El periodo excede de lo previsto"
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def erp_monthly_director(url, code, through_month):
-    """Three monthly ERP points from the latest CT 422 snapshot of each month.
-
-    One read only when the director evolution is selected and POE has enough
-    data. More than one snapshot within the same month counts only once.
-    """
-    with connect(url) as conn:
-        return conn.execute("""
-            WITH months AS (
-                SELECT date_trunc('month', snapshot_date)::date AS period,
-                       MAX(snapshot_date) AS snapshot_date
-                FROM fact_hours
-                WHERE work_center='422'
-                  AND snapshot_date < (%s::date + INTERVAL '1 month')
-                GROUP BY 1 ORDER BY 1 DESC LIMIT 3
-            ), managers AS (
-                SELECT project_code,
-                       substring(btrim(project_manager) FROM '^[^[:space:]]+') AS code
-                FROM projects
-            )
-            SELECT m.period, SUM(f.hours_incurred) AS accumulated
-            FROM months m
-            JOIN v_reporting_of_hours f ON f.snapshot_date=m.snapshot_date
-                                      AND f.work_center='422'
-            JOIN managers p ON p.project_code=f.project_code AND p.code=%s
-            GROUP BY m.period ORDER BY m.period
-        """, (through_month, code)).fetchall()
-
-
 def consecutive_months(periods):
     """Require three contiguous calendar months, not three arbitrary rows."""
     return len(periods) == 3 and all(
@@ -521,80 +491,49 @@ def eac_exhaustion(eac, total, monthly_rate, last_month):
     return f"{MONTH_NAMES[crossing.month-1]} {crossing.year}"
 
 
-def exhaustion_rows(data, year, code, reference, erp):
-    """Always report evidence, withholding the forecast until both sources qualify."""
-    entries = [(date(year, month, 1),
-                data["hours"].get((code, date(year, month, 1)), (None, None))[0])
-               for month in range(1, 13)]
-    real = [(period, value) for period, value in entries if value is not None]
-    recent_poe = real[-3:]
-    poe_periods = [period for period, _ in recent_poe]
-    poe_count = consecutive_tail_count(poe_periods)
-    poe_ready = poe_count == 3
-
-    opening = data.get("opening", {}).get(code)
-    poe_total = Decimal(str(opening or 0)) + sum(
-        (Decimal(str(value)) for _, value in real), Decimal(0)
-    )
-    poe_rate = (sum((Decimal(str(v)) for _, v in recent_poe), Decimal(0)) / 3
-                if poe_ready else None)
-    # 'erp' is the last three DISTINCT natural months, one snapshot each.
-    erp_points = sorted(
-        [(r["period"], Decimal(str(r["accumulated"])))
-         for r in erp if r.get("accumulated") is not None],
-        key=lambda item: item[0],
-    )
-    recent_erp = erp_points[-3:]
-    erp_periods = [period for period, _ in recent_erp]
-    erp_count = consecutive_tail_count(erp_periods)
-    erp_ready = erp_count == 3
-    erp_rate = ((recent_erp[-1][1] - recent_erp[0][1]) / 2
-                if erp_ready else None)
-    both_ready = (poe_ready and erp_ready and poe_periods == erp_periods)
-    eac = reference.get("eac_hours") if reference else None
-
-    def row(name, observations, total, rate, final_month):
-        coverage = f"{observations}/3 meses"
-        forecast = INSUFFICIENT
-        if both_ready and eac is not None and rate is not None:
-            forecast = eac_exhaustion(eac, total, rate, final_month)
-        return {
-            "Fuente": name,
-            "Meses disponibles": coverage,
-            "Último mes": (f"{MONTH_NAMES[final_month.month-1]} {final_month.year}"
-                           if final_month else "Sin datos"),
-            "Acumulado (h)": (float(total) if total is not None else None),
-            "Ritmo (h/mes)": (float(rate) if rate is not None else None),
-            "Agotamiento EAC": forecast,
-        }
-
-    return [
-        row("Incurrido OF", erp_count, recent_erp[-1][1] if recent_erp else None,
-            erp_rate, erp_periods[-1] if erp_periods else None),
-        row("POE real", poe_count, poe_total if real else None,
-            poe_rate, poe_periods[-1] if poe_periods else None),
+def exhaustion_rows(data, year, code, reference):
+    """Forecast from the last three consecutive POE real months only."""
+    real = [
+        (date(year, month, 1), data["hours"].get(
+            (code, date(year, month, 1)), (None, None))[0])
+        for month in range(1, 13)
     ]
+    real = [(period, value) for period, value in real if value is not None]
+    recent = real[-3:]
+    periods = [period for period, _ in recent]
+    count = consecutive_tail_count(periods)
+    ready = count == 3
+    opening = Decimal(str(data.get("opening", {}).get(code) or 0))
+    total = opening + sum((Decimal(str(value)) for _, value in real), Decimal(0))
+    rate = (sum((Decimal(str(value)) for _, value in recent), Decimal(0)) / 3
+            if ready else None)
+    eac = reference.get("eac_hours") if reference else None
+    last = periods[-1] if periods else None
+    result = (eac_exhaustion(eac, total, rate, last)
+              if ready and eac is not None else
+              "Sin EAC de referencia" if ready and eac is None else INSUFFICIENT)
+    return [{
+        "Fuente": "POE real",
+        "Meses disponibles": f"{count}/3 meses",
+        "Último mes": (f"{MONTH_NAMES[last.month-1]} {last.year}"
+                       if last else "Sin datos"),
+        "Acumulado (h)": float(total) if real else None,
+        "Ritmo (h/mes)": float(rate) if rate is not None else None,
+        "Agotamiento EAC": result,
+    }]
 
 
 def render_exhaustion_table(url, data, year, code, reference):
-    """Always show a read-only evidence table below the POE evolution figure."""
-    st.markdown("**Estimación de agotamiento EAC (3 meses)**")
-    # Show the latest ERP evidence of the selected year, including snapshots
-    # newer than the final POE real month; no month is treated as zero.
-    through_month = date(year, 12, 1)
-    try:
-        erp = erp_monthly_director(url, code, through_month)
-    except psycopg.Error as exc:
-        st.warning(f"No se pudo consultar el histórico OF: {type(exc).__name__}")
-        return
-    rows = exhaustion_rows(data, year, code, reference, erp)
+    """Read-only POE trend table; no extra Neon queries or ERP dependency."""
+    st.markdown("**Estimación de agotamiento EAC (3 meses POE real)**")
+    rows = exhaustion_rows(data, year, code, reference)
     if reference and reference.get("eac_hours") is not None:
         st.caption(f"Referencia EAC ({reference['year']} Q{reference['quarter']}): "
                    f"{float(reference['eac_hours']):,.0f} horas. "
-                   "La estimación requiere tres meses consecutivos coincidentes "
-                   "de POE real e incurrido OF.")
+                   "Ritmo calculado exclusivamente con los tres últimos "
+                   "meses consecutivos de POE real.")
     else:
-        st.caption("Sin EAC de referencia. Se muestran los datos de consumo disponibles.")
+        st.caption("Sin EAC de referencia. Se muestran los datos POE reales disponibles.")
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True,
                  column_config={
                      "Acumulado (h)": st.column_config.NumberColumn(
