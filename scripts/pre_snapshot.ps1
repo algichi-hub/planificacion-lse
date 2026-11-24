@@ -5,6 +5,8 @@ param(
     [string]$OoffTextoFile = "data/ooff_texto.csv",
     [string]$ClosedFile = "data/OOFFCerradasMO.txt",
     [string]$OutputFile = "data/ooff_texto_consolidado.zip",
+    [string]$ZipFile = "data/planificacion-lse.zip",
+    [string]$SevenZip = "",
     [string]$SnapshotDate = (Get-Date -Format "yyyy-MM-dd"),
     [switch]$Help
 )
@@ -25,6 +27,9 @@ PARÁMETROS:
   -OoffTextoFile  Textos ERP; data/ooff_texto.csv.
   -ClosedFile     OF cerradas; data/OOFFCerradasMO.txt.
   -OutputFile     ZIP generado; data/ooff_texto_consolidado.zip.
+  -ZipFile        ZIP AES-256 ERP; data/planificacion-lse.zip.
+  -SevenZip       Ruta opcional a 7z.exe; por defecto autodetección.
+  LSE_ZIP_PASSWORD  Contraseña del ZIP cifrado (variable de entorno).
   -SnapshotDate   Fecha de preparación, por defecto hoy (yyyy-MM-dd).
   -Help           Muestra esta ayuda y termina sin procesar archivos.
 
@@ -43,6 +48,12 @@ function Resolve-ProjectPath([string]$candidate) {
     if ([System.IO.Path]::IsPathRooted($candidate)) { return $candidate }
     return Join-Path $repoDir $candidate
 }
+$zip = Resolve-ProjectPath $ZipFile
+$dataDir = Join-Path $repoDir "data"
+$prepareArgs = @((Join-Path $scriptDir "prepare_input_zip.py"), "--zip", $zip, "--data-dir", $dataDir)
+if ($SevenZip) { $prepareArgs += @("--seven-zip", $SevenZip) }
+& python @prepareArgs
+if ($LASTEXITCODE -ne 0) { throw "Falló la preparación segura del ZIP ERP." }
 $hours = Resolve-ProjectPath $HoursFile
 $projects = Resolve-ProjectPath $ProjectsFile
 $source = Resolve-ProjectPath $OoffTextoFile
