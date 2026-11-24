@@ -53,70 +53,66 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(consecutive_tail_count(periods), 2)
         self.assertEqual(consecutive_tail_count([]), 0)
 
-    def test_exhaustion_two_source_rates_and_zero_is_real(self):
+    def test_exhaustion_uses_poe_real_only_including_zero(self):
         data = {"directors": {"A": "DIRECTOR"},
-                "hours": {("A", date(2026, 10, 1)): (Decimal(0), None),
-                          ("A", date(2026, 11, 1)): (Decimal(100), None),
-                          ("A", date(2026, 12, 1)): (Decimal(200), None)},
+                "hours": {("A", date(2026, 8, 1)): (Decimal(0), Decimal(900)),
+                          ("A", date(2026, 9, 1)): (Decimal(100), Decimal(900)),
+                          ("A", date(2026, 10, 1)): (Decimal(200), Decimal(900)),
+                          ("A", date(2026, 11, 1)): (None, Decimal(900))},
                 "opening": {"A": Decimal(200)}, "opening_count": {"A": 1}}
-        erp = [{"period": date(2026, 10, 1), "accumulated": Decimal(200)},
-               {"period": date(2026, 11, 1), "accumulated": Decimal(260)},
-               {"period": date(2026, 12, 1), "accumulated": Decimal(400)}]
-        rows = exhaustion_rows(data, 2026, "A",
-                               {"eac_hours": Decimal(1000)}, erp)
-        self.assertEqual([r["Fuente"] for r in rows], ["Incurrido OF", "POE real"])
+        rows = exhaustion_rows(data, 2026, "A", {"eac_hours": Decimal(1000)})
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["Fuente"], "POE real")
+        self.assertEqual(rows[0]["Meses disponibles"], "3/3 meses")
+        self.assertEqual(rows[0]["Último mes"], "Octubre 2026")
         self.assertEqual(rows[0]["Ritmo (h/mes)"], 100)
-        self.assertEqual(rows[1]["Ritmo (h/mes)"], 100)
-        self.assertEqual(rows[1]["Acumulado (h)"], 500)
-        self.assertEqual(rows[0]["Agotamiento EAC"], "Junio 2027")
-        self.assertEqual(rows[1]["Agotamiento EAC"], "Mayo 2027")
-        incomplete = exhaustion_rows(data, 2026, "A", {"eac_hours": 1000}, erp[:2])
-        self.assertEqual(incomplete[0]["Meses disponibles"], "2/3 meses")
-        self.assertEqual(incomplete[0]["Acumulado (h)"], 260)
-        self.assertEqual(incomplete[0]["Agotamiento EAC"],
-                         "No se dispone de suficientes datos")
-        self.assertEqual(incomplete[1]["Meses disponibles"], "3/3 meses")
+        self.assertEqual(rows[0]["Acumulado (h)"], 500)
+        self.assertEqual(rows[0]["Agotamiento EAC"], "Marzo 2027")
 
-    def test_exhaustion_insufficient_poe_shows_evidence_table(self):
+    def test_exhaustion_incomplete_still_displays_data(self):
         data = {"hours": {("A", date(2026, 10, 1)): (Decimal(10), None),
                           ("A", date(2026, 11, 1)): (Decimal(20), None)}}
-        erp = [{"period": date(2026, 10, 1), "accumulated": Decimal(100)},
-               {"period": date(2026, 11, 1), "accumulated": Decimal(120)}]
-        with patch("poe_board.erp_monthly_director", return_value=erp) as query, \
-             patch("poe_board.st.dataframe") as table, \
-             patch("poe_board.st.caption"), patch("poe_board.st.markdown"):
+        with patch("poe_board.st.dataframe") as table, \
+             patch("poe_board.st.caption"), patch("poe_board.st.markdown"), \
+             patch("poe_board.connect") as connect:
             render_exhaustion_table("url", data, 2026, "A",
                                     {"year": 2026, "quarter": 3, "eac_hours": 100})
-        query.assert_called_once_with("url", "A", date(2026, 12, 1))
+        connect.assert_not_called()
         table.assert_called_once()
         frame = table.call_args.args[0]
-        self.assertEqual(frame["Meses disponibles"].tolist(),
-                         ["2/3 meses", "2/3 meses"])
-        self.assertEqual(frame["Acumulado (h)"].tolist(), [120, 30])
+        self.assertEqual(frame["Meses disponibles"].tolist(), ["2/3 meses"])
+        self.assertEqual(frame["Acumulado (h)"].tolist(), [30])
         self.assertEqual(frame["Agotamiento EAC"].tolist(),
-                         ["No se dispone de suficientes datos"] * 2)
+                         ["No se dispone de suficientes datos"])
 
-    def test_exhaustion_renders_table_only_and_no_new_plot(self):
+    def test_exhaustion_renders_table_only_without_queries(self):
         data = {"hours": {("A", date(2026, 10, 1)): (Decimal(10), None),
                           ("A", date(2026, 11, 1)): (Decimal(20), None),
                           ("A", date(2026, 12, 1)): (Decimal(30), None)},
                 "opening": {"A": None}, "opening_count": {"A": 0}}
-        erp = [{"period": date(2026, m, 1), "accumulated": 100*m}
-               for m in (10, 11, 12)]
-        with patch("poe_board.erp_monthly_director", return_value=erp) as query, \
-             patch("poe_board.st.dataframe") as table, \
+        with patch("poe_board.st.dataframe") as table, \
              patch("poe_board.st.plotly_chart") as plot, \
-             patch("poe_board.st.markdown"), patch("poe_board.st.caption"):
+             patch("poe_board.st.markdown"), patch("poe_board.st.caption"), \
+             patch("poe_board.connect") as connect:
             render_exhaustion_table("url", data, 2026, "A",
                                     {"year": 2026, "quarter": 3, "eac_hours": 900})
-        query.assert_called_once_with("url", "A", date(2026, 12, 1))
+        connect.assert_not_called()
         table.assert_called_once()
         plot.assert_not_called()
         frame = table.call_args.args[0]
         self.assertEqual(list(frame.columns),
                          ["Fuente", "Meses disponibles", "Último mes",
                           "Acumulado (h)", "Ritmo (h/mes)", "Agotamiento EAC"])
-        self.assertTrue(all(isinstance(x, str) for x in frame["Agotamiento EAC"]))
+        self.assertEqual(frame["Agotamiento EAC"].iloc[0], "Julio 2030")
+
+    def test_nonconsecutive_real_months_do_not_enable_forecast(self):
+        data = {"hours": {("A", date(2026, 7, 1)): (Decimal(10), None),
+                          ("A", date(2026, 9, 1)): (Decimal(20), None),
+                          ("A", date(2026, 10, 1)): (Decimal(30), None)},
+                "opening": {}, "opening_count": {}}
+        row = exhaustion_rows(data, 2026, "A", {"eac_hours": 100})[0]
+        self.assertEqual(row["Meses disponibles"], "2/3 meses")
+        self.assertEqual(row["Agotamiento EAC"], "No se dispone de suficientes datos")
 
     def test_read_year_widget_defaults_to_selected_year(self):
         # Prevent Streamlit from implicitly defaulting to min_value=2000.
