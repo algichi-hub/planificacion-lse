@@ -10,3 +10,6 @@ data/*.zip
 
 # Raw ERP exports (never commit)
 entrada/
+
+# Local ZIP extraction state: never commit source hashes
+data/.planificacion_lse_zip_state.json
