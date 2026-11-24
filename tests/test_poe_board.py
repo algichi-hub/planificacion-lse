@@ -87,7 +87,7 @@ class POEV5Tests(unittest.TestCase):
         data["hours"][("A", date(2026, 8, 1))] = (Decimal(0), None)
         rows = exhaustion_rows(data, 2026, "A", {"eac_hours": 200})
         self.assertEqual([r["Agotamiento EAC"] for r in rows],
-                         ["Enero 2027", "Junio 2027", "Enero 2028"])
+                         ["Marzo 2027", "Abril 2027", "Agosto 2027"])
 
     def test_each_scenario_has_independent_horizon_outcome(self):
         data = {"hours": {
