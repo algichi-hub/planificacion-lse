@@ -221,9 +221,9 @@ def main() -> None:
     import psycopg
 
     load_dotenv()
-    database_url = os.getenv("DATABASE_URL")
+    database_url = os.getenv("LSE_DATABASE_URL")
     if not database_url:
-        raise SystemExit("Falta DATABASE_URL en el entorno o en .env")
+        raise SystemExit("Falta LSE_DATABASE_URL en el entorno o en .env (no se usa DATABASE_URL compartida)")
 
     schema = Path(__file__).resolve().parents[1] / "sql" / "schema.sql"
 
