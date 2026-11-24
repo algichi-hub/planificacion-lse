@@ -89,6 +89,19 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual([r["Agotamiento EAC"] for r in rows],
                          ["Marzo 2027", "Abril 2027", "Agosto 2027"])
 
+    def test_only_oldest_window_missing_keeps_e1_and_e2(self):
+        data = {"hours": {
+            ("A", date(2026, 7, 1)): (Decimal(20), None),
+            ("A", date(2026, 8, 1)): (Decimal(30), None),
+            ("A", date(2026, 9, 1)): (Decimal(40), None),
+            ("A", date(2026, 10, 1)): (Decimal(50), None),
+        }}
+        rows = exhaustion_rows(data, 2026, "A", {"eac_hours": 200})
+        self.assertEqual(rows[0]["Agotamiento EAC"], "Diciembre 2026")
+        self.assertEqual(rows[1]["Agotamiento EAC"], "Diciembre 2026")
+        self.assertEqual(rows[2]["Agotamiento EAC"],
+                         "No se dispone de suficientes datos")
+
     def test_each_scenario_has_independent_horizon_outcome(self):
         data = {"hours": {
             ("A", date(2026, 6, 1)): (Decimal(0), None),
