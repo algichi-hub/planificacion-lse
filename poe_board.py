@@ -492,52 +492,64 @@ def eac_exhaustion(eac, total, monthly_rate, last_month):
 
 
 def exhaustion_rows(data, year, code, reference):
-    """Forecast from the last three consecutive POE real months only."""
-    real = [
-        (date(year, month, 1), data["hours"].get(
-            (code, date(year, month, 1)), (None, None))[0])
+    """Three independent rolling POE-real rates, projected from the same N.
+
+    E1 uses N-2..N; E2 uses N-3..N-1; E3 uses N-4..N-2.
+    No ERP or planned values enter the calculation. Missing real cells are
+    never replaced with zero, including in earlier scenarios.
+    """
+    real = {
+        date(year, month, 1): data["hours"].get(
+            (code, date(year, month, 1)), (None, None))[0]
         for month in range(1, 13)
-    ]
-    real = [(period, value) for period, value in real if value is not None]
-    recent = real[-3:]
-    periods = [period for period, _ in recent]
-    count = consecutive_tail_count(periods)
-    ready = count == 3
+    }
+    observed = [period for period, value in real.items() if value is not None]
+    last = observed[-1] if observed else None
     opening = Decimal(str(data.get("opening", {}).get(code) or 0))
-    total = opening + sum((Decimal(str(value)) for _, value in real), Decimal(0))
-    rate = (sum((Decimal(str(value)) for _, value in recent), Decimal(0)) / 3
-            if ready else None)
+    total = opening + sum(
+        (Decimal(str(value)) for value in real.values() if value is not None),
+        Decimal(0),
+    )
     eac = reference.get("eac_hours") if reference else None
-    last = periods[-1] if periods else None
-    result = (eac_exhaustion(eac, total, rate, last)
-              if ready and eac is not None else
-              "Sin EAC de referencia" if ready and eac is None else INSUFFICIENT)
-    return [{
-        "Fuente": "POE real",
-        "Meses disponibles": f"{count}/3 meses",
-        "Último mes": (f"{MONTH_NAMES[last.month-1]} {last.year}"
-                       if last else "Sin datos"),
-        "Acumulado (h)": float(total) if real else None,
-        "Ritmo (h/mes)": float(rate) if rate is not None else None,
-        "Agotamiento EAC": result,
-    }]
+    rows = []
+    for scenario, offsets in (
+        ("E1", (-2, -1, 0)),
+        ("E2", (-3, -2, -1)),
+        ("E3", (-4, -3, -2)),
+    ):
+        months = [month_shift(last, offset) for offset in offsets] if last else []
+        values = [real.get(month) for month in months]
+        complete = len(values) == 3 and all(value is not None for value in values)
+        rate = (sum((Decimal(str(value)) for value in values), Decimal(0)) / 3
+                if complete else None)
+        estimate = (eac_exhaustion(eac, total, rate, last)
+                    if complete and eac is not None else
+                    "Sin EAC de referencia" if complete else INSUFFICIENT)
+        rows.append({
+            "Escenario": scenario,
+            "Muestra POE real": " · ".join(
+                f"{MONTHS[month.month-1]}/{str(month.year)[-2:]}" for month in months
+            ) if months else "Sin datos",
+            "Ritmo (h/mes)": float(rate) if rate is not None else None,
+            "Agotamiento EAC": estimate,
+        })
+    return rows
 
 
 def render_exhaustion_table(url, data, year, code, reference):
-    """Read-only POE trend table; no extra Neon queries or ERP dependency."""
-    st.markdown("**Estimación de agotamiento EAC (3 meses POE real)**")
+    """Three scenario rows, one local POE calculation; no Neon reads."""
+    st.markdown("**Estimación de agotamiento EAC — escenarios POE real**")
     rows = exhaustion_rows(data, year, code, reference)
     if reference and reference.get("eac_hours") is not None:
         st.caption(f"Referencia EAC ({reference['year']} Q{reference['quarter']}): "
                    f"{float(reference['eac_hours']):,.0f} horas. "
-                   "Ritmo calculado exclusivamente con los tres últimos "
-                   "meses consecutivos de POE real.")
+                   "E1 (N−2 a N), E2 (N−3 a N−1), E3 (N−4 a N−2). "
+                   "Todas las estimaciones parten del acumulado real en N.")
     else:
-        st.caption("Sin EAC de referencia. Se muestran los datos POE reales disponibles.")
+        st.caption("Sin EAC de referencia. Los escenarios se calculan "
+                   "solo a partir de POE real.")
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True,
                  column_config={
-                     "Acumulado (h)": st.column_config.NumberColumn(
-                         "Acumulado (h)", format="%.0f"),
                      "Ritmo (h/mes)": st.column_config.NumberColumn(
                          "Ritmo (h/mes)", format="%.0f"),
                  })
