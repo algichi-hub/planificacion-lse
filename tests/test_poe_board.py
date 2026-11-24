@@ -14,6 +14,7 @@ from poe_board import (
     restore_pending_cells, queue_action, visibility_changes, render,
     annual_evolution, director_eac, render_annual_chart, available_eac_snapshots,
     director_bar_sources, director_bar_frame, render_director_bars,
+    consecutive_months, eac_exhaustion, exhaustion_rows, render_exhaustion_table,
 )
 
 
@@ -29,6 +30,73 @@ class POEV5Tests(unittest.TestCase):
                 ("310008", date(2026, 11, 1)): (None, Decimal("100")),
             },
         }
+
+    def test_exhaustion_month_year_and_horizon(self):
+        last = date(2026, 10, 1)
+        self.assertEqual(eac_exhaustion(15000, 10000, 1000, last), "Marzo 2027")
+        self.assertEqual(eac_exhaustion(15000, 10000, 5000, last), "Noviembre 2026")
+        self.assertEqual(eac_exhaustion(120, 0, 1, last), "Octubre 2036")
+        self.assertEqual(eac_exhaustion(121, 0, 1, last), "El periodo excede de lo previsto")
+        self.assertEqual(eac_exhaustion(200, 100, 0, last), "El periodo excede de lo previsto")
+        self.assertEqual(eac_exhaustion(200, 100, -1, last), "El periodo excede de lo previsto")
+        self.assertEqual(eac_exhaustion(200, 200, 15, last), "EAC alcanzado o superado")
+
+    def test_projection_requires_matching_three_calendar_months(self):
+        self.assertTrue(consecutive_months([
+            date(2026, 10, 1), date(2026, 11, 1), date(2026, 12, 1)]))
+        self.assertFalse(consecutive_months([
+            date(2026, 9, 1), date(2026, 11, 1), date(2026, 12, 1)]))
+        self.assertFalse(consecutive_months([date(2026, 11, 1), date(2026, 12, 1)]))
+
+    def test_exhaustion_two_source_rates_and_zero_is_real(self):
+        data = {"directors": {"A": "DIRECTOR"},
+                "hours": {("A", date(2026, 10, 1)): (Decimal(0), None),
+                          ("A", date(2026, 11, 1)): (Decimal(100), None),
+                          ("A", date(2026, 12, 1)): (Decimal(200), None)},
+                "opening": {"A": Decimal(200)}, "opening_count": {"A": 1}}
+        erp = [{"period": date(2026, 10, 1), "accumulated": Decimal(200)},
+               {"period": date(2026, 11, 1), "accumulated": Decimal(260)},
+               {"period": date(2026, 12, 1), "accumulated": Decimal(400)}]
+        rows = exhaustion_rows(data, 2026, "A",
+                               {"eac_hours": Decimal(1000)}, erp)
+        self.assertEqual([r["Fuente"] for r in rows], ["Incurrido OF", "POE real"])
+        self.assertEqual(rows[0]["Ritmo (h/mes)"], 100)
+        self.assertEqual(rows[1]["Ritmo (h/mes)"], 100)
+        self.assertEqual(rows[1]["Acumulado (h)"], 500)
+        self.assertEqual(rows[0]["Agotamiento EAC"], "Junio 2027")
+        self.assertEqual(rows[1]["Agotamiento EAC"], "Mayo 2027")
+        self.assertIsNone(exhaustion_rows(data, 2026, "A", {"eac_hours": 1000}, erp[:2]))
+
+    def test_exhaustion_insufficient_poe_avoids_neon(self):
+        data = {"hours": {("A", date(2026, 10, 1)): (Decimal(10), None),
+                          ("A", date(2026, 11, 1)): (Decimal(20), None)}}
+        with patch("poe_board.erp_monthly_director") as query, \
+             patch("poe_board.st.info") as info, patch("poe_board.st.markdown"):
+            render_exhaustion_table("url", data, 2026, "A",
+                                    {"year": 2026, "quarter": 3, "eac_hours": 100})
+        query.assert_not_called()
+        info.assert_called_once_with("No se dispone de suficientes datos")
+
+    def test_exhaustion_renders_table_only_and_no_new_plot(self):
+        data = {"hours": {("A", date(2026, 10, 1)): (Decimal(10), None),
+                          ("A", date(2026, 11, 1)): (Decimal(20), None),
+                          ("A", date(2026, 12, 1)): (Decimal(30), None)},
+                "opening": {"A": None}, "opening_count": {"A": 0}}
+        erp = [{"period": date(2026, m, 1), "accumulated": 100*m}
+               for m in (10, 11, 12)]
+        with patch("poe_board.erp_monthly_director", return_value=erp) as query, \
+             patch("poe_board.st.dataframe") as table, \
+             patch("poe_board.st.plotly_chart") as plot, \
+             patch("poe_board.st.markdown"), patch("poe_board.st.caption"):
+            render_exhaustion_table("url", data, 2026, "A",
+                                    {"year": 2026, "quarter": 3, "eac_hours": 900})
+        query.assert_called_once_with("url", "A", date(2026, 12, 1))
+        table.assert_called_once()
+        plot.assert_not_called()
+        frame = table.call_args.args[0]
+        self.assertEqual(list(frame.columns),
+                         ["Fuente", "Ritmo (h/mes)", "Acumulado (h)", "Agotamiento EAC"])
+        self.assertTrue(all(isinstance(x, str) for x in frame["Agotamiento EAC"]))
 
     def test_read_year_widget_defaults_to_selected_year(self):
         # Prevent Streamlit from implicitly defaulting to min_value=2000.
