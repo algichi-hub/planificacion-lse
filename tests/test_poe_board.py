@@ -302,8 +302,8 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(eac_label.xanchor, "center")
         self.assertEqual(eac_label.y, 1000)
         self.assertEqual(eac_label.yref, "y")
-        self.assertEqual(eac_label.yanchor, "top")
-        self.assertLess(eac_label.yshift, 0)
+        self.assertEqual(eac_label.yanchor, "bottom")
+        self.assertGreater(eac_label.yshift, 0)
         self.assertEqual(eac_label.font.color, "#F28C28")
         self.assertFalse(eac_label.showarrow)
         percentage_labels = [a for a in labels if a is not eac_label]
