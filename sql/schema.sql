@@ -53,6 +53,21 @@ CREATE INDEX IF NOT EXISTS idx_fact_hours_bonus
 CREATE INDEX IF NOT EXISTS idx_fact_hours_work_center
     ON fact_hours (snapshot_date, work_center);
 
+-- Lifecycle changes only; no per-bonus hours or repeated full snapshots.
+-- Events are rebuilt for a date after the monthly import completes.
+CREATE TABLE IF NOT EXISTS of_lifecycle_events (
+    snapshot_date DATE NOT NULL,
+    order_number TEXT NOT NULL,
+    previous_snapshot_date DATE NOT NULL,
+    previous_status TEXT NOT NULL,
+    current_status TEXT NOT NULL,
+    PRIMARY KEY (snapshot_date, order_number),
+    CHECK (previous_snapshot_date < snapshot_date),
+    CHECK (previous_status <> current_status)
+);
+CREATE INDEX IF NOT EXISTS idx_of_lifecycle_events_order
+    ON of_lifecycle_events (order_number, snapshot_date);
+
 -- Persistent, incremental mapping: operation/bonus -> work center.
 CREATE TABLE IF NOT EXISTS bonus_ct_registry (
     bonus_id TEXT PRIMARY KEY CHECK (bonus_id ~ '^[0-9]{10}$'),
