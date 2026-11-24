@@ -54,11 +54,20 @@ def verify_zip_layout(archive: Path) -> None:
         if any(not (record.flag_bits & 1) or record.compress_type != 99
                for record in records):
             raise ValueError("Se exige que los cuatro ficheros estén cifrados con ZIP AES")
-        if any(not any(record.extra[pos:pos+2] == bytes((1, 153))
-                       for pos in range(0, len(record.extra)-1))
-               for record in records):
-            # AES extra field 0x9901; scan permits other ZIP extras as well.
-            raise ValueError("ZIP con entradas sin cabecera AES")
+        for record in records:
+            extra = record.extra
+            pos, aes256 = 0, False
+            while pos + 4 <= len(extra):
+                field_id = int.from_bytes(extra[pos:pos+2], "little")
+                length = int.from_bytes(extra[pos+2:pos+4], "little")
+                field = extra[pos+4:pos+4+length]
+                if len(field) != length:
+                    raise ValueError("Cabecera ZIP AES incompleta")
+                if field_id == 0x9901 and length >= 7 and field[4] == 3:
+                    aes256 = True
+                pos += 4 + length
+            if not aes256:
+                raise ValueError(f"Fichero no cifrado con AES-256: {record.filename}")
 
 
 def run_7zip(seven_zip: str, operation: str, archive: Path, password: str, destination: Path | None = None) -> None:
