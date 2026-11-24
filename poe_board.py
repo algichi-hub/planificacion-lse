@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import psycopg
 from psycopg.rows import dict_row
 import streamlit as st
-from eac_board import chart as eac_chart, list_snapshots
+from eac_board import chart as eac_chart, comparison_table, list_snapshots
 
 MONTHS = ("ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
           "JUL", "AGO", "SEP", "OCT", "NOV", "DIC")
@@ -395,6 +395,30 @@ def render_director_bars(data, sources):
         "POE previsto": FORECAST_LIGHT, "Incurrido OF": "#1F4E8C",
     }, stack_groups={"POE real": "POE", "POE previsto": "POE",
                      "EAC": "EAC", "Incurrido OF": "OF"})
+    # Reuse the EAC table with the exact rows and aggregates of the bars.
+    table = frame.copy()
+    table["poe_total"] = pd.to_numeric(table["poe_real"], errors="coerce").add(
+        pd.to_numeric(table["poe_future"], errors="coerce"), fill_value=0
+    )
+    table["etc_remaining"] = (
+        pd.to_numeric(table["etc_hours"], errors="coerce")
+        - pd.to_numeric(table["hours_incurred"], errors="coerce")
+    )
+    st.caption("POE total = POE real + POE previsto; ETC = EAC − Incurrido OF.")
+    comparison_table(
+        table,
+        {
+            "management_group": "Director",
+            "hours_incurred": "Total incurrido",
+            "etc_hours": "EAC",
+            "etc_remaining": "ETC",
+            "poe_real": "POE real",
+            "poe_future": "POE previsto",
+            "poe_total": "POE total",
+        },
+        "poe_directores.csv",
+        "poe_directores",
+    )
 
 
 
@@ -455,26 +479,26 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
                              line=dict(color=FORECAST_LIGHT, width=3, dash="dot")))
     eac_total = (float(reference["eac_hours"])
                  if reference and reference["eac_hours"] is not None else None)
-    percentages = ([f"{value / eac_total:.1%}" if value is not None else None
-                    for value in actual]
-                   if eac_total is not None and eac_total > 0 else [None] * 12)
     fig.add_trace(go.Scatter(x=MONTHS, y=actual, name="POE incurrido",
                              mode="lines+markers", connectgaps=False,
                              line=dict(color=POE_BLUE, width=3)))
-    # Render labels in the final trace so no curve or marker covers them.
+    # Plotly Scatter labels do not support rotation; annotations do.
     if eac_total is not None and eac_total > 0:
-        fig.add_trace(go.Scatter(
-            x=MONTHS, y=actual, name="Porcentaje incurrido",
-            mode="text", text=[f"<b>{p}</b>" if p is not None else None
-                               for p in percentages],
-            textposition="top center", textfont=dict(size=15, color=POE_BLUE),
-            cliponaxis=False, showlegend=False, hoverinfo="skip"))
+        for month_label, value in zip(MONTHS, actual):
+            if value is not None:
+                fig.add_annotation(
+                    x=month_label, y=value,
+                    text=f"<b>{value / eac_total:.0%}</b>",
+                    textangle=-90, showarrow=False, yshift=28,
+                    font=dict(size=13, color=POE_BLUE),
+                )
     # EAC label is added last to overlay the lines and percentage labels.
     if eac_total is not None:
         fig.add_trace(go.Scatter(
             x=[MONTHS[-2]], y=[eac_total], mode="text",
             name="Etiqueta EAC",
-            text=[f"<b>EAC={eac_total:,.0f}</b>".replace(",", ".")],
+            text=[f"<b>EAC ({reference['year']} Q{reference['quarter']}) = "
+                  f"{eac_total:,.0f} horas</b>".replace(",", ".")],
             textposition="top right",
             textfont=dict(size=15, color=EAC_ORANGE),
             cliponaxis=False, showlegend=False, hoverinfo="skip"))
