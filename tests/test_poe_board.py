@@ -112,7 +112,7 @@ class POEV5Tests(unittest.TestCase):
         with patch("poe_board.eac_chart"), patch("poe_board.comparison_table"), \
              patch("poe_board.st.subheader"), patch("poe_board.st.caption") as caption:
             render_director_bars(data, sources)
-        label = caption.call_args.args[0]
+        label = caption.call_args_list[0].args[0]
         self.assertIn("hasta DIC/2025–OCT/2026", label)
         self.assertIn("desde NOV/2026", label)
         self.assertIn("Incurrido OFs (15/10/2026)", label)
