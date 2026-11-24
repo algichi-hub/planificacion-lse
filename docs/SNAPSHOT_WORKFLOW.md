@@ -17,11 +17,11 @@ python -m unittest discover -s tests -p test_pre_snapshot_closed.py -v
 python -m unittest discover -s tests -p test_load_snapshot_gate.py -v
 .\\scripts\\pre_snapshot.ps1 -Ct 422
 .\\scripts\\load_snapshot.ps1 -Ct 422 -ValidateOnly
-# SOLO con DATABASE_URL apuntando a Neon development y tras validar:
+# SOLO con LSE_DATABASE_URL apuntando a Neon development y tras validar:
 .\\scripts\\load_snapshot.ps1 -Ct 422
 ```
 
-**Aviso de seguridad:** `DATABASE_URL` de Streamlit no modifica la variable de entorno de PowerShell. El cargador comprueba `current_setting('neon.branch_id', true)` antes de cualquier escritura y rechaza ramas distintas de `development`.
+**Aviso de seguridad:** `LSE_DATABASE_URL` de Streamlit no modifica la variable de entorno de PowerShell. El cargador comprueba `current_setting('neon.branch_id', true)` antes de cualquier escritura y rechaza ramas distintas de `development`.
 
 ## OF cerradas en los informes (development)
 
@@ -157,13 +157,13 @@ El proceso valida los seis ficheros obligatorios, cabeceras, formato CSV, descri
 **Solo cuando el Gate anterior haya pasado y el usuario haya autorizado la carga:**
 
 ```powershell
-# DATABASE_URL debe estar configurada en la sesión PowerShell.
+# LSE_DATABASE_URL debe estar configurada en la sesión PowerShell.
 .\scripts\load_snapshot.ps1 -Ct 422
 ```
 
 El script filtra las filas de horas por Ct, inserta sus proyectos y las descripciones de OF y bonos por fecha en PostgreSQL/Neon. Utiliza una transacción: si se produce un fallo SQL se revierte la operación. Repetir una fecha reemplaza sus filas de horas y descripciones para ese snapshot: **no usar para sobrescribir una fecha histórica sin revisar el alcance**.
 
-No compartir nunca `DATABASE_URL` ni otras credenciales.
+No compartir nunca `LSE_DATABASE_URL` ni otras credenciales.
 
 ## 5. Solución de incidencias
 
@@ -172,7 +172,7 @@ No compartir nunca `DATABASE_URL` ni otras credenciales.
 - **Error de fecha:** alinear `-SnapshotDate` de preparación y carga.
 - **Hash de origen distinto:** uno de los exportes cambió; repetir preparación e interpretación.
 - **Error de codificación:** exportar CSV con UTF-8 BOM, `;` y CRLF.
-- **Sin `DATABASE_URL`:** `-ValidateOnly` no necesita credenciales; la carga real sí.
+- **Sin `LSE_DATABASE_URL`:** `-ValidateOnly` no necesita credenciales; la carga real sí.
 - **Duda sobre la descripción:** usar `Pendiente confirmar` y revisar el expediente, nunca suplir información por intuición.
 
 ## 6. Ejecución típica completa
@@ -202,7 +202,7 @@ La utilidad independiente `scripts/delete_snapshot.ps1` elimina las filas de `fa
 .\scripts\delete_snapshot.ps1 -Ct 422 -SnapshotDate "2026-10-15" -Execute -Confirm
 ```
 
-**Precauciones:** requiere `DATABASE_URL`. La herramienta no modifica tablas SQL, vistas, índices ni otros snapshots. No borra proyectos maestros, porque son globales y pueden pertenecer a otras fechas o Ct. `imports` carece de columna Ct: sus filas de esa fecha se borran **solo cuando ya no existían horas de otros Ct en la fecha antes del borrado**; de lo contrario se conservan como metadatos compartidos. Del mismo modo, una OF o bono que figure en otro Ct de esa fecha mantiene su descripción.
+**Precauciones:** requiere `LSE_DATABASE_URL`. La herramienta no modifica tablas SQL, vistas, índices ni otros snapshots. No borra proyectos maestros, porque son globales y pueden pertenecer a otras fechas o Ct. `imports` carece de columna Ct: sus filas de esa fecha se borran **solo cuando ya no existían horas de otros Ct en la fecha antes del borrado**; de lo contrario se conservan como metadatos compartidos. Del mismo modo, una OF o bono que figure en otro Ct de esa fecha mantiene su descripción.
 
 **Limitaciones importantes:** el sistema actual guarda las descripciones con clave `(snapshot_date, OF)` o `(snapshot_date, bono)`, y las importaciones con `(snapshot_date, source_name)`. No se pueden eliminar selectivamente esas filas por Ct cuando son compartidas. Para una trazabilidad estricta multicentro deberá ampliarse el esquema e importador. La herramienta no garantiza exclusión frente a un proceso de importación concurrente; no ejecutar carga y borrado simultáneamente. Las ramas de respaldo/PITR de Neon no se purgan.
 
