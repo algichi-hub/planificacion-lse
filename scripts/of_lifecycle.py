@@ -16,7 +16,7 @@ def refresh_lifecycle_events(cur, snapshot):
                        WHEN UPPER(BTRIM(MAX(f.order_status))) LIKE 'ACTIV%%' THEN 'ACTIVA'
                        WHEN UPPER(BTRIM(MAX(f.order_status))) LIKE 'LANZAD%%' THEN 'LANZADA'
                        WHEN UPPER(BTRIM(MAX(f.order_status))) LIKE 'TERMINAD%%' THEN 'TERMINADA'
-                       ELSE UPPER(BTRIM(MAX(f.order_status)))
+                       ELSE COALESCE(NULLIF(UPPER(BTRIM(MAX(f.order_status))), ''), 'DESCONOCIDO')
                    END AS status
             FROM fact_hours f
             WHERE f.snapshot_date <= %s
