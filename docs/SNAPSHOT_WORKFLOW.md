@@ -4,7 +4,7 @@ Sistema **Planificación LSE**. Ejecutar en Windows PowerShell desde la raíz de
 
 **Prompt maestro para interpretar los expedientes:** [LLM_ERP_PROMPT.md](LLM_ERP_PROMPT.md). Emplear siempre su versión vigente con el ZIP generado por `pre_snapshot.ps1`.
 
-> **Desarrollo `feature/closed-of-importer` — importador de seis entradas.** Los cuatro ERP originales y los dos CSV interpretados deben estar en `entrada/`. La preparación `pre_snapshot.ps1 -Ct 422` conserva su salida `data/ooff_texto_consolidado.zip`. El ZIP incluye los índices originales y los auxiliares `indice_bono_ct.csv` e `indice_of_cerradas.csv`. `load_snapshot.ps1 -Ct 422 -ValidateOnly` valida los seis ficheros, la fecha, los cuatro hashes y las coberturas **sin acceder a Neon**. Sin `-ValidateOnly`, la conexión debe apuntar exactamente a la rama Neon `development` (`br-blue-firefly-b1adfx47`), y toda la carga se ejecuta en una transacción. `main` y Neon `production` no se modifican.
+> **Desarrollo `feature/closed-of-importer` — importador desde ZIP AES-256.** Los cuatro ERP originales se extraen a `data/`; los dos CSV interpretados permanecen en la misma carpeta. La preparación `pre_snapshot.ps1 -Ct 422` genera `data/ooff_texto_consolidado.zip`. El ZIP incluye los índices originales y los auxiliares `indice_bono_ct.csv` e `indice_of_cerradas.csv`. `load_snapshot.ps1 -Ct 422 -ValidateOnly` valida los seis ficheros, la fecha, los cuatro hashes y las coberturas **sin acceder a Neon**. Sin `-ValidateOnly`, la conexión debe apuntar exactamente a la rama Neon `development` (`br-blue-firefly-b1adfx47`), y toda la carga se ejecuta en una transacción. `main` y Neon `production` no se modifican.
 >
 > Las horas finales de OF cerradas se almacenan una sola vez por OF en `closed_of_hours`, con cuatro decimales. Las OF sin CT histórico o con más de un CT quedan sin atribución hasta su revisión, y las vistas existentes del tablero siguen consultando `fact_hours`: **los cierres aún no se suman al dashboard**. El registro histórico `bonus_ct_registry` se actualiza incrementalmente y rechaza conflictos sin sobrescribir CT existentes.
 
@@ -31,6 +31,27 @@ python -m unittest discover -s tests -p test_load_snapshot_gate.py -v
 - La asignación manual se vuelve a aplicar en futuras cargas y la importación se bloquea si nuevos bonos ERP contradicen un centro asignado manualmente. Se bloquean también las OF simultáneamente operativas/cerradas en un snapshot y las reaperturas sin conciliación para evitar perder horas o presentar un estado ambiguo. No modifica snapshots anteriores.
 - La visualización y exportación siguen el formato decimal de la aplicación; la precisión numérica del cierre en Neon es `NUMERIC(18,4)`.
 - La aplicación de producción permanece en `main` y no debe apuntar a esta base `development` mientras se verifica el cambio.
+
+## Entrada cifrada ZIP AES-256 (flujo vigente de esta rama)
+
+Todos los archivos se gestionan bajo `data/`; no se utiliza `entrada/`.
+
+La única fuente ERP que se entrega manualmente es `data/planificacion-lse.zip`, con **exactamente** estos cuatro ficheros en la raíz: `OOFF_OP_Planif_Terminada.txt`, `OOFFCerradasMO.txt`, `Proyectos_Sevilla.csv` y `ooff_texto.csv`.
+
+**Requisitos:** 7-Zip instalado en Windows; variable de entorno `LSE_ZIP_PASSWORD` configurada en la sesión o permanentemente. Nunca escribir la contraseña en archivos, argumentos PowerShell ni en Git.
+
+`pre_snapshot.ps1` llama a `scripts/prepare_input_zip.py` y comprueba la estructura AES del ZIP, ejecuta `7z t` para validar contenido cifrado y `7z x` en una carpeta temporal de `data/`. Solo si las cuatro extracciones son correctas, las mueve a `data/`; conserva las copias originales si falla. Cuando el ZIP no ha cambiado y los hashes extraídos coinciden, evita una nueva extracción. Se crea el manifiesto local ignorado por Git `data/.planificacion_lse_zip_state.json`.
+
+`load_snapshot.ps1` valida **hashes de ZIP y de los cuatro archivos extraídos** mediante `--check-only`; no ejecuta 7-Zip ni sustituye ficheros. Un cambio del ZIP obliga a repetir `pre_snapshot.ps1`, regenerar el ZIP consolidado de textos y la interpretación correspondiente. Los dos CSV interpretados y `data/ooff_texto_consolidado.zip` se mantienen en la misma carpeta.
+
+```powershell
+.\\scripts\\pre_snapshot.ps1 -Ct 422 -SnapshotDate "2026-11-30"
+.\\scripts\\load_snapshot.ps1 -Ct 422 -SnapshotDate "2026-11-30" -ValidateOnly
+```
+
+La extracción del ZIP no escribe en Neon. `-ValidateOnly` sigue sin establecer conexión con la base de datos. Para pruebas de extracción sin preparar ZIP de interpretación, utilizar `python scripts/prepare_input_zip.py --zip data/planificacion-lse.zip --data-dir data`.
+
+**Seguridad:** 7-Zip recibe la contraseña por argumento del proceso hijo (`-p...`); no se registra ni se imprime, pero puede aparecer temporalmente en herramientas del sistema que inspeccionen las líneas de comandos de procesos. Restringir el acceso al equipo durante la extracción.
 
 ## Resumen del proceso
 
