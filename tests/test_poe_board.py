@@ -65,17 +65,31 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(rows[1]["Acumulado (h)"], 500)
         self.assertEqual(rows[0]["Agotamiento EAC"], "Junio 2027")
         self.assertEqual(rows[1]["Agotamiento EAC"], "Mayo 2027")
-        self.assertIsNone(exhaustion_rows(data, 2026, "A", {"eac_hours": 1000}, erp[:2]))
+        incomplete = exhaustion_rows(data, 2026, "A", {"eac_hours": 1000}, erp[:2])
+        self.assertEqual(incomplete[0]["Meses disponibles"], "2/3 meses")
+        self.assertEqual(incomplete[0]["Acumulado (h)"], 260)
+        self.assertEqual(incomplete[0]["Agotamiento EAC"],
+                         "No se dispone de suficientes datos")
+        self.assertEqual(incomplete[1]["Meses disponibles"], "3/3 meses")
 
-    def test_exhaustion_insufficient_poe_avoids_neon(self):
+    def test_exhaustion_insufficient_poe_shows_evidence_table(self):
         data = {"hours": {("A", date(2026, 10, 1)): (Decimal(10), None),
                           ("A", date(2026, 11, 1)): (Decimal(20), None)}}
-        with patch("poe_board.erp_monthly_director") as query, \
-             patch("poe_board.st.info") as info, patch("poe_board.st.markdown"):
+        erp = [{"period": date(2026, 10, 1), "accumulated": Decimal(100)},
+               {"period": date(2026, 11, 1), "accumulated": Decimal(120)}]
+        with patch("poe_board.erp_monthly_director", return_value=erp) as query, \
+             patch("poe_board.st.dataframe") as table, \
+             patch("poe_board.st.caption"), patch("poe_board.st.markdown"):
             render_exhaustion_table("url", data, 2026, "A",
                                     {"year": 2026, "quarter": 3, "eac_hours": 100})
-        query.assert_not_called()
-        info.assert_called_once_with("No se dispone de suficientes datos")
+        query.assert_called_once_with("url", "A", date(2026, 12, 1))
+        table.assert_called_once()
+        frame = table.call_args.args[0]
+        self.assertEqual(frame["Meses disponibles"].tolist(),
+                         ["2/3 meses", "2/3 meses"])
+        self.assertEqual(frame["Acumulado (h)"].tolist(), [120, 30])
+        self.assertEqual(frame["Agotamiento EAC"].tolist(),
+                         ["No se dispone de suficientes datos"] * 2)
 
     def test_exhaustion_renders_table_only_and_no_new_plot(self):
         data = {"hours": {("A", date(2026, 10, 1)): (Decimal(10), None),
@@ -95,7 +109,8 @@ class POEV5Tests(unittest.TestCase):
         plot.assert_not_called()
         frame = table.call_args.args[0]
         self.assertEqual(list(frame.columns),
-                         ["Fuente", "Ritmo (h/mes)", "Acumulado (h)", "Agotamiento EAC"])
+                         ["Fuente", "Meses disponibles", "Último mes",
+                          "Acumulado (h)", "Ritmo (h/mes)", "Agotamiento EAC"])
         self.assertTrue(all(isinstance(x, str) for x in frame["Agotamiento EAC"]))
 
     def test_read_year_widget_defaults_to_selected_year(self):
