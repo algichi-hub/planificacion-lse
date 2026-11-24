@@ -490,6 +490,18 @@ def consecutive_months(periods):
     )
 
 
+def consecutive_tail_count(periods):
+    """Count contiguous observed months ending at the most recent observation."""
+    if not periods:
+        return 0
+    count = 1
+    for i in range(len(periods) - 1, 0, -1):
+        if month_shift(periods[i-1], 1) != periods[i]:
+            break
+        count += 1
+    return count
+
+
 def eac_exhaustion(eac, total, monthly_rate, last_month):
     """Pure calculation; all monetary/hour calculations use Decimal."""
     if eac is None:
@@ -517,7 +529,8 @@ def exhaustion_rows(data, year, code, reference, erp):
     real = [(period, value) for period, value in entries if value is not None]
     recent_poe = real[-3:]
     poe_periods = [period for period, _ in recent_poe]
-    poe_ready = consecutive_months(poe_periods)
+    poe_count = consecutive_tail_count(poe_periods)
+    poe_ready = poe_count == 3
 
     opening = data.get("opening", {}).get(code)
     poe_total = Decimal(str(opening or 0)) + sum(
@@ -533,7 +546,8 @@ def exhaustion_rows(data, year, code, reference, erp):
     )
     recent_erp = erp_points[-3:]
     erp_periods = [period for period, _ in recent_erp]
-    erp_ready = consecutive_months(erp_periods)
+    erp_count = consecutive_tail_count(erp_periods)
+    erp_ready = erp_count == 3
     erp_rate = ((recent_erp[-1][1] - recent_erp[0][1]) / 2
                 if erp_ready else None)
     both_ready = (poe_ready and erp_ready and poe_periods == erp_periods)
@@ -555,9 +569,9 @@ def exhaustion_rows(data, year, code, reference, erp):
         }
 
     return [
-        row("Incurrido OF", len(recent_erp), recent_erp[-1][1] if recent_erp else None,
+        row("Incurrido OF", erp_count, recent_erp[-1][1] if recent_erp else None,
             erp_rate, erp_periods[-1] if erp_periods else None),
-        row("POE real", len(recent_poe), poe_total if real else None,
+        row("POE real", poe_count, poe_total if real else None,
             poe_rate, poe_periods[-1] if poe_periods else None),
     ]
 
