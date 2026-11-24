@@ -1,5 +1,6 @@
 """POE: independent manual monthly real/planned hours. ERP directors are read-only."""
 from datetime import date
+from decimal import ROUND_CEILING
 from decimal import Decimal, InvalidOperation
 import json
 
@@ -446,6 +447,130 @@ def annual_evolution(data, code, year):
     return actual, forecast, last_actual, gaps
 
 
+MONTH_NAMES = ("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+               "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre")
+INSUFFICIENT = "No se dispone de suficientes datos"
+OUT_OF_RANGE = "El periodo excede de lo previsto"
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def erp_monthly_director(url, code, through_month):
+    """Three monthly ERP points from the latest CT 422 snapshot of each month.
+
+    One read only when the director evolution is selected and POE has enough
+    data. More than one snapshot within the same month counts only once.
+    """
+    with connect(url) as conn:
+        return conn.execute("""
+            WITH months AS (
+                SELECT date_trunc('month', snapshot_date)::date AS period,
+                       MAX(snapshot_date) AS snapshot_date
+                FROM fact_hours
+                WHERE work_center='422'
+                  AND snapshot_date < (%s::date + INTERVAL '1 month')
+                GROUP BY 1 ORDER BY 1 DESC LIMIT 3
+            ), managers AS (
+                SELECT project_code,
+                       substring(btrim(project_manager) FROM '^[^[:space:]]+') AS code
+                FROM projects
+            )
+            SELECT m.period, SUM(f.hours_incurred) AS accumulated
+            FROM months m
+            JOIN v_reporting_of_hours f ON f.snapshot_date=m.snapshot_date
+                                      AND f.work_center='422'
+            JOIN managers p ON p.project_code=f.project_code AND p.code=%s
+            GROUP BY m.period ORDER BY m.period
+        """, (through_month, code)).fetchall()
+
+
+def consecutive_months(periods):
+    """Require three contiguous calendar months, not three arbitrary rows."""
+    return len(periods) == 3 and all(
+        month_shift(periods[i], 1) == periods[i+1] for i in range(2)
+    )
+
+
+def eac_exhaustion(eac, total, monthly_rate, last_month):
+    """Pure calculation; all monetary/hour calculations use Decimal."""
+    if eac is None:
+        return "Sin EAC de referencia"
+    eac = Decimal(str(eac))
+    total = Decimal(str(total))
+    rate = Decimal(str(monthly_rate))
+    if total >= eac:
+        return "EAC alcanzado o superado"
+    if rate <= 0:
+        return OUT_OF_RANGE
+    months = (eac - total) / rate
+    if months > 120:
+        return OUT_OF_RANGE
+    # Report the month in which the cumulative series first reaches the EAC.
+    crossing = month_shift(last_month, int(months.to_integral_value(rounding=ROUND_CEILING)))
+    return f"{MONTH_NAMES[crossing.month-1]} {crossing.year}"
+
+
+def exhaustion_rows(data, year, code, reference, erp):
+    """Two independent source trends; both require matching three-month coverage."""
+    poe = [(date(year, month, 1), data["hours"].get(
+        (code, date(year, month, 1)), (None, None))[0])
+           for month in range(1, 13)]
+    poe = [(period, value) for period, value in poe if value is not None]
+    periods = [period for period, _ in poe[-3:]]
+    if not consecutive_months(periods):
+        return None
+    erp_by_month = {r["period"]: r["accumulated"] for r in erp}
+    if any(period not in erp_by_month or erp_by_month[period] is None
+           for period in periods):
+        return None
+    # Month-end POE accumulated must have a known opening balance when there
+    # are recorded real hours before the selected year.
+    if data.get("opening_count", {}).get(code, 0) and data.get("opening", {}).get(code) is None:
+        return None
+    opening = Decimal(str(data.get("opening", {}).get(code) or 0))
+    total_poe = opening + sum(
+        (Decimal(str(v)) for period, v in poe if period <= periods[-1]),
+        Decimal(0),
+    )
+    poe_rate = sum((Decimal(str(v)) for _, v in poe[-3:]), Decimal(0)) / 3
+    erp_vals = [Decimal(str(erp_by_month[period])) for period in periods]
+    erp_rate = (erp_vals[-1] - erp_vals[0]) / 2
+    eac = reference.get("eac_hours") if reference else None
+    return [
+        {"Fuente": "Incurrido OF", "Ritmo (h/mes)": float(erp_rate),
+         "Acumulado (h)": float(erp_vals[-1]),
+         "Agotamiento EAC": eac_exhaustion(eac, erp_vals[-1], erp_rate, periods[-1])},
+        {"Fuente": "POE real", "Ritmo (h/mes)": float(poe_rate),
+         "Acumulado (h)": float(total_poe),
+         "Agotamiento EAC": eac_exhaustion(eac, total_poe, poe_rate, periods[-1])},
+    ]
+
+
+def render_exhaustion_table(url, data, year, code, reference):
+    """Lazy, read-only summary immediately below the evolution chart."""
+    st.markdown("**Estimación de agotamiento EAC (3 meses)**")
+    if not reference or reference.get("eac_hours") is None:
+        st.info("Sin EAC de referencia")
+        return
+    poe_periods = [date(year, month, 1) for month in range(1, 13)
+                   if data["hours"].get((code, date(year, month, 1)), (None, None))[0] is not None]
+    if not consecutive_months(poe_periods[-3:]):
+        st.info(INSUFFICIENT)
+        return
+    try:
+        erp = erp_monthly_director(url, code, poe_periods[-1])
+    except psycopg.Error as exc:
+        st.warning(f"No se pudo consultar el histórico OF: {type(exc).__name__}")
+        return
+    rows = exhaustion_rows(data, year, code, reference, erp)
+    if rows is None:
+        st.info(INSUFFICIENT)
+        return
+    st.caption(f"Referencia: EAC ({reference['year']} Q{reference['quarter']}). "
+               "OF: variación de acumulados ERP entre tres cortes mensuales; "
+               "POE: media de tres consumos reales.")
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+
 def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None):
     """Draw only a selected visible director with monthly POE data for the year."""
     if code is None or code not in data["directors"] or not data.get("visible", {}).get(code, True):
@@ -752,6 +877,7 @@ def render(url):
             if selected_eac is not None and reference is not None:
                 render_annual_chart(url, data, year, selected_eac,
                                     reference=reference, code=selected_director)
+                render_exhaustion_table(url, data, year, selected_director, reference)
             else:
                 st.info("Sin datos")
         else:
