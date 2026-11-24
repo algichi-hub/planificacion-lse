@@ -294,18 +294,22 @@ class POEV5Tests(unittest.TestCase):
         figure = chart.call_args.args[0]
         real = next(trace for trace in figure.data if trace.name == "POE incurrido")
         limit = next(trace for trace in figure.data if trace.name == "Límite EAC")
-        eac_label = figure.data[-1]
-        self.assertEqual(eac_label.name, "Etiqueta EAC")
-        self.assertEqual(eac_label.text, ("<b>EAC (2026 Q4) = 1.000 horas</b>",))
-        self.assertEqual(eac_label.mode, "text")
-        self.assertEqual(eac_label.textfont.color, "#F28C28")
-        self.assertEqual(eac_label.textfont.size, 15)
-        self.assertEqual(eac_label.showlegend, False)
-        self.assertEqual(eac_label.hoverinfo, "skip")
         labels = figure.layout.annotations
-        self.assertEqual([a.text for a in labels], ["<b>25%</b>", "<b>30%</b>"])
-        self.assertTrue(all(a.textangle == -90 for a in labels))
-        self.assertTrue(all(a.showarrow is False for a in labels))
+        eac_label = next(a for a in labels if a.text.startswith("<b>EAC ("))
+        self.assertEqual(eac_label.text, "<b>EAC (2026 Q4) = 1.000 horas</b>")
+        self.assertEqual(eac_label.x, 0)
+        self.assertEqual(eac_label.xref, "paper")
+        self.assertEqual(eac_label.xanchor, "left")
+        self.assertEqual(eac_label.y, 1000)
+        self.assertEqual(eac_label.yref, "y")
+        self.assertEqual(eac_label.yanchor, "top")
+        self.assertLess(eac_label.yshift, 0)
+        self.assertEqual(eac_label.font.color, "#F28C28")
+        self.assertFalse(eac_label.showarrow)
+        percentage_labels = [a for a in labels if a is not eac_label]
+        self.assertEqual([a.text for a in percentage_labels],
+                         ["<b>25%</b>", "<b>30%</b>"])
+        self.assertTrue(all(a.textangle == -90 for a in percentage_labels))
         self.assertEqual(real.mode, "lines+markers")
         self.assertEqual(limit.y[0], 1000)
 
@@ -325,7 +329,9 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(trace.mode, "lines+markers")
         self.assertFalse(any(t.name == "Porcentaje incurrido"
                              for t in chart.call_args.args[0].data))
-        self.assertEqual(sum(t.name == "Etiqueta EAC" for t in chart.call_args.args[0].data), 1)
+        labels = chart.call_args.args[0].layout.annotations
+        self.assertEqual(len(labels), 1)
+        self.assertIn("EAC (2026 Q3)", labels[0].text)
 
     def test_bar_poe_lifetime_totals_independent_of_selected_year(self):
         data = {"directors": {"A": "FIRST", "B": "HIDDEN", "C": "THIRD"},
