@@ -602,16 +602,16 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
                     textangle=-90, showarrow=False, yshift=28,
                     font=dict(size=13, color=POE_BLUE),
                 )
-    # EAC label is added last to overlay the lines and percentage labels.
+    # Anchor the EAC caption to the left plot edge, below its dashed line.
     if eac_total is not None:
-        fig.add_trace(go.Scatter(
-            x=[MONTHS[-2]], y=[eac_total], mode="text",
-            name="Etiqueta EAC",
-            text=[f"<b>EAC ({reference['year']} Q{reference['quarter']}) = "
-                  f"{eac_total:,.0f} horas</b>".replace(",", ".")],
-            textposition="top right",
-            textfont=dict(size=15, color=EAC_ORANGE),
-            cliponaxis=False, showlegend=False, hoverinfo="skip"))
+        fig.add_annotation(
+            x=0, xref="paper", xanchor="left",
+            y=eac_total, yref="y", yanchor="top", yshift=-8,
+            text=(f"<b>EAC ({reference['year']} Q{reference['quarter']}) = "
+                  f"{eac_total:,.0f} horas</b>").replace(",", "."),
+            font=dict(size=15, color=EAC_ORANGE),
+            align="left", showarrow=False,
+        )
     values = ([float(reference["eac_hours"])]
               if reference and reference["eac_hours"] is not None else [])
     values += [float(value) for value in actual + forecast if value is not None]
