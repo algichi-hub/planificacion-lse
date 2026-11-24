@@ -41,7 +41,7 @@ PARÁMETROS:
   -Help           Muestra esta ayuda y termina sin conectarse a Neon.
 
 IMPORTANTE: Sin -ValidateOnly se conecta a Neon y escribe el snapshot.
-Se requiere DATABASE_URL para escribir. Valida primero, revisa los datos
+Se requiere LSE_DATABASE_URL para escribir. Valida primero, revisa los datos
 y usa la fecha coherente con la preparación si se ejecuta otro día.
 Más información: docs/SNAPSHOT_WORKFLOW.md.
 '@ | Write-Host
@@ -93,8 +93,8 @@ $arguments = @(
 
 if ($ValidateOnly) {
     $arguments += "--validate-only"
-} elseif (-not $env:DATABASE_URL) {
-    throw "Falta DATABASE_URL en la sesión. Usa -ValidateOnly para probar sin Neon."
+} elseif (-not $env:LSE_DATABASE_URL) {
+    throw "Falta LSE_DATABASE_URL en la sesión. Usa -ValidateOnly para probar sin Neon."
 }
 
 & python @arguments
