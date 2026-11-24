@@ -300,6 +300,7 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(eac_label.x, 0)
         self.assertEqual(eac_label.xref, "paper")
         self.assertEqual(eac_label.xanchor, "left")
+        self.assertEqual(eac_label.xshift, 16)
         self.assertEqual(eac_label.y, 1000)
         self.assertEqual(eac_label.yref, "y")
         self.assertEqual(eac_label.yanchor, "top")
