@@ -565,12 +565,9 @@ def exhaustion_rows(data, year, code, reference, erp):
 def render_exhaustion_table(url, data, year, code, reference):
     """Always show a read-only evidence table below the POE evolution figure."""
     st.markdown("**Estimación de agotamiento EAC (3 meses)**")
-    # The ERP query is scoped to the last real POE month when available, and
-    # otherwise to the end of the year visible in POE.
-    poe_periods = [date(year, month, 1) for month in range(1, 13)
-                   if data["hours"].get((code, date(year, month, 1)), (None, None))[0]
-                   is not None]
-    through_month = poe_periods[-1] if poe_periods else date(year, 12, 1)
+    # Show the latest ERP evidence of the selected year, including snapshots
+    # newer than the final POE real month; no month is treated as zero.
+    through_month = date(year, 12, 1)
     try:
         erp = erp_monthly_director(url, code, through_month)
     except psycopg.Error as exc:
