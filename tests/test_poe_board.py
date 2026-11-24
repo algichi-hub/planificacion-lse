@@ -297,10 +297,9 @@ class POEV5Tests(unittest.TestCase):
         labels = figure.layout.annotations
         eac_label = next(a for a in labels if a.text.startswith("<b>EAC ("))
         self.assertEqual(eac_label.text, "<b>EAC (2026 Q4) = 1.000 horas</b>")
-        self.assertEqual(eac_label.x, 0)
+        self.assertEqual(eac_label.x, 0.5)
         self.assertEqual(eac_label.xref, "paper")
-        self.assertEqual(eac_label.xanchor, "left")
-        self.assertEqual(eac_label.xshift, 16)
+        self.assertEqual(eac_label.xanchor, "center")
         self.assertEqual(eac_label.y, 1000)
         self.assertEqual(eac_label.yref, "y")
         self.assertEqual(eac_label.yanchor, "top")
