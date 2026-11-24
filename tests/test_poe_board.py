@@ -103,7 +103,7 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(list(frame.columns),
                          ["Fuente", "Meses disponibles", "Último mes",
                           "Acumulado (h)", "Ritmo (h/mes)", "Agotamiento EAC"])
-        self.assertEqual(frame["Agotamiento EAC"].iloc[0], "Julio 2030")
+        self.assertEqual(frame["Agotamiento EAC"].iloc[0], "Junio 2030")
 
     def test_nonconsecutive_real_months_do_not_enable_forecast(self):
         data = {"hours": {("A", date(2026, 7, 1)): (Decimal(10), None),
