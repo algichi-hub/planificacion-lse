@@ -605,7 +605,7 @@ def render_annual_chart(url, data, year, snapshot_id, reference=None, code=None)
     # Anchor the EAC caption to the left plot edge, below its dashed line.
     if eac_total is not None:
         fig.add_annotation(
-            x=0, xref="paper", xanchor="left",
+            x=0, xref="paper", xanchor="left", xshift=16,
             y=eac_total, yref="y", yanchor="top", yshift=-8,
             text=(f"<b>EAC ({reference['year']} Q{reference['quarter']}) = "
                   f"{eac_total:,.0f} horas</b>").replace(",", "."),
