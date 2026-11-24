@@ -109,13 +109,40 @@ class POEV5Tests(unittest.TestCase):
              "first_forecast": date(2026, 11, 1),
              "erp_date": date(2026, 10, 15)},
         ]
-        with patch("poe_board.eac_chart"), patch("poe_board.st.subheader"), \
-             patch("poe_board.st.caption") as caption:
+        with patch("poe_board.eac_chart"), patch("poe_board.comparison_table"), \
+             patch("poe_board.st.subheader"), patch("poe_board.st.caption") as caption:
             render_director_bars(data, sources)
         label = caption.call_args.args[0]
         self.assertIn("hasta DIC/2025–OCT/2026", label)
         self.assertIn("desde NOV/2026", label)
         self.assertIn("Incurrido OFs (15/10/2026)", label)
+
+    def test_poe_director_table_reuses_chart_rows_and_eac_component(self):
+        data = {"directors": {"A": "FIRST", "B": "HIDDEN", "C": "THIRD"},
+                "visible": {"A": True, "B": False, "C": True},
+                "hours": {}}
+        rows = [
+            {"code": "A", "eac_hours": Decimal(1000),
+             "incurred_hours": Decimal(350), "poe_real": Decimal(270),
+             "poe_future": Decimal(140), "erp_date": date(2026, 11, 24)},
+            {"code": "C", "eac_hours": None, "incurred_hours": None,
+             "poe_real": None, "poe_future": None,
+             "erp_date": date(2026, 11, 24)},
+        ]
+        with patch("poe_board.eac_chart") as bars, \
+             patch("poe_board.comparison_table") as summary, \
+             patch("poe_board.st.subheader"), patch("poe_board.st.caption"):
+            render_director_bars(data, rows)
+        frame = summary.call_args.args[0]
+        self.assertEqual(frame["management_group"].tolist(),
+                         bars.call_args.args[0]["management_group"].tolist())
+        self.assertEqual(frame["etc_remaining"].iloc[0], Decimal(650))
+        self.assertEqual(frame["poe_total"].iloc[0], Decimal(410))
+        self.assertTrue(pd.isna(frame["poe_total"].iloc[1]))
+        self.assertEqual(summary.call_args.args[2], "poe_directores.csv")
+        self.assertEqual(list(summary.call_args.args[1]),
+                         ["management_group", "hours_incurred", "etc_hours",
+                          "etc_remaining", "poe_real", "poe_future", "poe_total"])
 
     def test_lazy_evolution_selector_and_year_specific_data(self):
         source = inspect.getsource(render)
@@ -159,22 +186,18 @@ class POEV5Tests(unittest.TestCase):
         figure = chart.call_args.args[0]
         real = next(trace for trace in figure.data if trace.name == "POE incurrido")
         limit = next(trace for trace in figure.data if trace.name == "Límite EAC")
-        labels = next(t for t in figure.data if t.name == "Porcentaje incurrido")
         eac_label = figure.data[-1]
         self.assertEqual(eac_label.name, "Etiqueta EAC")
-        self.assertEqual(eac_label.text, ("<b>EAC=1.000</b>",))
+        self.assertEqual(eac_label.text, ("<b>EAC (2026 Q4) = 1.000 horas</b>",))
         self.assertEqual(eac_label.mode, "text")
         self.assertEqual(eac_label.textfont.color, "#F28C28")
         self.assertEqual(eac_label.textfont.size, 15)
         self.assertEqual(eac_label.showlegend, False)
         self.assertEqual(eac_label.hoverinfo, "skip")
-        self.assertEqual(labels.text[0:2], ("<b>25.0%</b>", "<b>30.0%</b>"))
-        self.assertIsNone(labels.text[2])
-        self.assertEqual(labels.mode, "text")
-        self.assertEqual(labels.textfont.size, 15)
-        self.assertEqual(labels.showlegend, False)
-        self.assertEqual(labels.hoverinfo, "skip")
-        self.assertFalse(labels.cliponaxis)
+        labels = figure.layout.annotations
+        self.assertEqual([a.text for a in labels], ["<b>25%</b>", "<b>30%</b>"])
+        self.assertTrue(all(a.textangle == -90 for a in labels))
+        self.assertTrue(all(a.showarrow is False for a in labels))
         self.assertEqual(real.mode, "lines+markers")
         self.assertEqual(limit.y[0], 1000)
 
@@ -339,7 +362,7 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(traces["POE incurrido"].line.color, "#2563EB")
         self.assertEqual([t.name for t in plot.call_args.args[0].data if t.showlegend is not False],
                          ["Límite EAC", "POE previsto", "POE incurrido"])
-        self.assertEqual(traces["Porcentaje incurrido"].textfont.color, "#2563EB")
+        self.assertEqual(plot.call_args.args[0].layout.annotations[0].font.color, "#2563EB")
         self.assertEqual(plot.call_args.args[0].layout.yaxis.range[0], 0)
 
     def test_2025_dragon_real_series_from_neon_and_no_forecast(self):
