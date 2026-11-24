@@ -10,6 +10,7 @@ from pathlib import Path
 
 from validate_snapshot import validate
 from closed_of_pipeline import load_closed_pipeline
+from of_lifecycle import refresh_lifecycle_events
 
 
 def read_text(path: Path) -> str:
@@ -292,6 +293,9 @@ def main() -> None:
                     (snapshot, csv_path.name, file_hash(csv_path), count),
                 )
 
+            # Status changes only: compare with last observed historical state.
+            lifecycle_changes = refresh_lifecycle_events(cur, snapshot)
+
             totals = cur.execute(
                 """
                 SELECT
@@ -310,6 +314,7 @@ def main() -> None:
     print(f"Proyectos maestro procesados: {project_count}")
     print(f"Filas de horas importadas: {hours_count}")
     print(f"Cierres OF importados (registro separado): {closed_result}")
+    print(f"Transiciones de ciclo de vida: {lifecycle_changes}")
     print(f"Proyectos sin correspondencia: {unmatched}")
     print(f"Horas concedidas: {totals[0]}")
     print(f"Horas incurridas: {totals[1]}")
