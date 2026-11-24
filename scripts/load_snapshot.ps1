@@ -1,13 +1,13 @@
 param(
     [string]$Ct,
     [string]$SnapshotDate = (Get-Date -Format "yyyy-MM-dd"),
-    [string]$HoursFile = "entrada/OOFF_OP_Planif_Terminada.txt",
-    [string]$ClosedFile = "entrada/OOFFCerradasMO.txt",
-    [string]$SourceTextFile = "entrada/ooff_texto.csv",
+    [string]$HoursFile = "data/OOFF_OP_Planif_Terminada.txt",
+    [string]$ClosedFile = "data/OOFFCerradasMO.txt",
+    [string]$SourceTextFile = "data/ooff_texto.csv",
     [string]$ExpectedNeonBranchId = "br-blue-firefly-b1adfx47",
-    [string]$ProjectsFile = "entrada/Proyectos_Sevilla.csv",
-    [string]$OfTextFile = "entrada/ooff_texto_interpretado.csv",
-    [string]$BonusTextFile = "entrada/bono_texto_interpretado.csv",
+    [string]$ProjectsFile = "data/Proyectos_Sevilla.csv",
+    [string]$OfTextFile = "data/ooff_texto_interpretado.csv",
+    [string]$BonusTextFile = "data/bono_texto_interpretado.csv",
     [string]$PreparedZip = "data/ooff_texto_consolidado.zip",
     [switch]$ValidateOnly,
     [switch]$Help
@@ -27,13 +27,13 @@ USO:
 PARÁMETROS:
   -Ct             Centro obligatorio salvo con -Help.
   -SnapshotDate   Fecha de snapshot, por defecto hoy (yyyy-MM-dd).
-  -HoursFile      entrada/OOFF_OP_Planif_Terminada.txt.
-  -ClosedFile     entrada/OOFFCerradasMO.txt.
-  -SourceTextFile entrada/ooff_texto.csv.
+  -HoursFile      data/OOFF_OP_Planif_Terminada.txt.
+  -ClosedFile     data/OOFFCerradasMO.txt.
+  -SourceTextFile data/ooff_texto.csv.
   -ExpectedNeonBranchId  br-blue-firefly-b1adfx47 (development, seguridad).
-  -ProjectsFile   entrada/Proyectos_Sevilla.csv.
-  -OfTextFile     entrada/ooff_texto_interpretado.csv.
-  -BonusTextFile  entrada/bono_texto_interpretado.csv.
+  -ProjectsFile   data/Proyectos_Sevilla.csv.
+  -OfTextFile     data/ooff_texto_interpretado.csv.
+  -BonusTextFile  data/bono_texto_interpretado.csv.
   -PreparedZip    data/ooff_texto_consolidado.zip (obligatorio; índices, fecha y hashes).
   -ValidateOnly   Valida archivos sin conectarse ni escribir en Neon.
   -Help           Muestra esta ayuda y termina sin conectarse a Neon.
