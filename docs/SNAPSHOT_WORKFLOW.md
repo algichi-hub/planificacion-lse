@@ -21,7 +21,7 @@ python -m unittest discover -s tests -p test_load_snapshot_gate.py -v
 .\\scripts\\load_snapshot.ps1 -Ct 422
 ```
 
-**Aviso de seguridad:** `LSE_DATABASE_URL` de Streamlit no modifica la variable de entorno de PowerShell. El cargador comprueba `current_setting('neon.branch_id', true)` antes de cualquier escritura y rechaza ramas distintas de `development`.
+**Aviso de seguridad:** La conexión configurada como `DATABASE_URL` en los secretos de Streamlit no modifica `LSE_DATABASE_URL` en PowerShell. El cargador comprueba `current_setting('neon.branch_id', true)` antes de cualquier escritura y rechaza ramas distintas de `development`.
 
 ## OF cerradas en los informes (development)
 
