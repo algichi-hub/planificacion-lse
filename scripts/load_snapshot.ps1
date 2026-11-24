@@ -9,6 +9,7 @@ param(
     [string]$OfTextFile = "data/ooff_texto_interpretado.csv",
     [string]$BonusTextFile = "data/bono_texto_interpretado.csv",
     [string]$PreparedZip = "data/ooff_texto_consolidado.zip",
+    [string]$ZipFile = "data/planificacion-lse.zip",
     [switch]$ValidateOnly,
     [switch]$Help
 )
@@ -35,6 +36,7 @@ PARÁMETROS:
   -OfTextFile     data/ooff_texto_interpretado.csv.
   -BonusTextFile  data/bono_texto_interpretado.csv.
   -PreparedZip    data/ooff_texto_consolidado.zip (obligatorio; índices, fecha y hashes).
+  -ZipFile        ZIP cifrado original; data/planificacion-lse.zip.
   -ValidateOnly   Valida archivos sin conectarse ni escribir en Neon.
   -Help           Muestra esta ayuda y termina sin conectarse a Neon.
 
@@ -56,6 +58,10 @@ function Resolve-ProjectPath([string]$candidate) {
     return Join-Path $repoDir $candidate
 }
 
+$zip = Resolve-ProjectPath $ZipFile
+$dataDir = Join-Path $repoDir "data"
+& python (Join-Path $scriptDir "prepare_input_zip.py") --zip $zip --data-dir $dataDir --check-only
+if ($LASTEXITCODE -ne 0) { throw "El ZIP original no corresponde a una extracción verificada. Ejecuta pre_snapshot.ps1 primero." }
 $hours = Resolve-ProjectPath $HoursFile
 $closed = Resolve-ProjectPath $ClosedFile
 $sourceText = Resolve-ProjectPath $SourceTextFile
