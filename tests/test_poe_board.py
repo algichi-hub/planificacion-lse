@@ -157,7 +157,7 @@ class POEV5Tests(unittest.TestCase):
 
     def test_edit_grid_shows_immutable_director_code(self):
         frame = month_frame(self.data(), date(2026, 11, 1))
-        self.assertEqual(frame["Código"].tolist(), ["110040", "310008"])
+        self.assertEqual(frame["Código"].tolist(), ["110040", "310008", ""])
         self.assertEqual(frame.columns.tolist(),
                          ["Visible", "Código", "Director", "Real (h)", "Previsto (h)"])
         edited = frame.copy()
@@ -173,9 +173,85 @@ class POEV5Tests(unittest.TestCase):
 
     def test_annual_view_contains_all_twelve_natural_months(self):
         frame, _ = annual_frame(self.data(), date.today().year)
-        self.assertEqual(frame.columns.tolist(), ["Código", "Director", *MONTHS])
+        self.assertEqual(frame.columns.tolist(), ["Código", "Director", *MONTHS, "Sum. REAL", "Sum. PREV", "Total"])
         self.assertEqual(frame["Código"].tolist(), ["110040", "310008"])
         self.assertEqual(len(MONTHS), 12)
+
+    def test_poe_yearly_totals_use_each_directors_last_real_month(self):
+        data = {"directors": {"A": "ONE", "B": "TWO"}, "visible": {"A": True, "B": True},
+                "hours": {
+                    ("A", date(2026, 1, 1)): (Decimal(100), None),
+                    ("A", date(2026, 2, 1)): (Decimal(-20), Decimal(999)),
+                    ("A", date(2026, 3, 1)): (None, Decimal(70)),
+                    ("A", date(2026, 4, 1)): (None, Decimal(-10)),
+                    ("B", date(2026, 1, 1)): (Decimal(50), None),
+                    ("B", date(2026, 2, 1)): (Decimal(0), Decimal(200)),
+                    ("B", date(2026, 3, 1)): (None, Decimal(30)),
+                }}
+        frame, mask = annual_frame(data, 2026)
+        self.assertEqual(frame["Director"].tolist(), ["ONE", "TWO", "TOTAL"])
+        self.assertEqual(frame.loc[0, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+                         [80, 60, 140])
+        self.assertEqual(frame.loc[1, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+                         [50, 30, 80])
+        self.assertEqual(frame.loc[2, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+                         [130, 90, 220])
+        # Month totals follow what is actually visible, not the cutoff sums.
+        self.assertEqual(frame.loc[2, "FEB"], -20)
+        self.assertEqual(frame.loc[2, "MAR"], 100)
+        self.assertIn(LIME, mask.loc[0, "Sum. REAL"])
+        self.assertIn(LIME, mask.loc[2, "Sum. REAL"])
+        self.assertIn("font-weight", mask.loc[2, "Director"])
+        self.assertIn("-20", style_annual(data, 2026).to_html())
+
+    def test_poe_last_real_december_forces_zero_future(self):
+        data = {"directors": {"A": "LAST"}, "hours": {
+            ("A", date(2026, 11, 1)): (Decimal(20), Decimal(900)),
+            ("A", date(2026, 12, 1)): (Decimal(-5), Decimal(500)),
+        }}
+        frame, _ = annual_frame(data, 2026)
+        self.assertEqual(frame.loc[0, "Sum. REAL"], 15)
+        self.assertEqual(frame.loc[0, "Sum. PREV"], 0)
+        self.assertEqual(frame.loc[0, "Total"], 15)
+        self.assertEqual(frame.loc[0, "DIC"], -5)
+
+    def test_poe_no_real_uses_forecast_only_and_zero_is_valid_cutoff(self):
+        data = {"directors": {"A": "ONLY PREV", "B": "ZERO"},
+                "hours": {
+                    ("A", date(2026, 2, 1)): (None, Decimal(40)),
+                    ("A", date(2026, 12, 1)): (None, Decimal(-5)),
+                    ("B", date(2026, 9, 1)): (Decimal(0), Decimal(100)),
+                    ("B", date(2026, 10, 1)): (None, Decimal(30)),
+                }}
+        frame, _ = annual_frame(data, 2026)
+        self.assertEqual(frame.loc[0, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+                         [0, 35, 35])
+        self.assertEqual(frame.loc[1, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+                         [0, 30, 30])
+
+    def test_poe_total_row_ignores_invisible_directors_and_changes_with_visibility(self):
+        data = {"directors": {"A": "ONE", "B": "HIDDEN"},
+                "visible": {"A": True, "B": False},
+                "hours": {
+                    ("A", date(2026, 10, 1)): (Decimal(5), None),
+                    ("A", date(2026, 12, 1)): (None, Decimal(10)),
+                    ("B", date(2026, 10, 1)): (Decimal(900), None),
+                }}
+        frame, _ = annual_frame(data, 2026)
+        self.assertEqual(frame["Director"].tolist(), ["ONE", "TOTAL"])
+        self.assertEqual(frame.loc[1, "Total"], 15)
+        self.assertEqual(frame.loc[1, "OCT"], 5)
+        self.assertEqual(data["hours"][("B", date(2026, 10, 1))][0], Decimal(900))
+        data["visible"]["B"] = True
+        frame, _ = annual_frame(data, 2026)
+        self.assertEqual(frame.iloc[-1]["Total"], 915)
+
+    def test_poe_totals_do_not_change_editor_or_query_path(self):
+        source = inspect.getsource(annual_frame) + inspect.getsource(style_annual)
+        self.assertNotIn("connect(", source)
+        self.assertNotIn("load_year(", source)
+        self.assertNotIn("save_month(", source)
+        self.assertNotIn("st.data_editor", source)
 
     def test_screen_sections_in_expected_order(self):
         source = inspect.getsource(render)
@@ -678,7 +754,7 @@ class POEV5Tests(unittest.TestCase):
         self.assertIn(LIME, colors.loc[0, "NOV"])
         self.assertEqual(colors.loc[1, "NOV"], "")
         self.assertTrue(pd.isna(frame.loc[0, "ENE"]))
-        self.assertEqual(len(frame.columns), 14)
+        self.assertEqual(len(frame.columns), 17)
         self.assertEqual(len(style_annual(self.data(), 2026).to_html()) > 0, True)
 
     def test_no_data_not_converted_to_zero(self):
@@ -888,7 +964,7 @@ class POEV5Tests(unittest.TestCase):
         editor = month_frame(data, date(2026, 11, 1))
         self.assertEqual(editor["Visible"].tolist(), [True, False])
         read, _ = annual_frame(data, 2026)
-        self.assertEqual(read["Director"].tolist(), ["PROGRAMA VCR8X8 DRAGON SERIE"])
+        self.assertEqual(read["Director"].tolist(), ["PROGRAMA VCR8X8 DRAGON SERIE", "TOTAL"])
         self.assertEqual(len(data["hours"]), 2)  # Hidden row retains all hours.
 
     def test_visibility_multi_selection_and_no_hour_changes(self):
@@ -899,7 +975,7 @@ class POEV5Tests(unittest.TestCase):
         self.assertEqual(changed, [("110040", True, False), ("310008", True, False)])
         self.assertEqual(month_changes(data, date(2026, 11, 1), editor), [])
         update_local(data, date(2026, 11, 1), [], changed)
-        self.assertEqual(len(annual_frame(data, 2026)[0]), 0)
+        self.assertEqual(annual_frame(data, 2026)[0]["Director"].tolist(), ["TOTAL"])
         self.assertEqual(len(month_frame(data, date(2026, 11, 1))), 2)
 
     def test_integer_display_does_not_mutate_decimal_storage(self):
