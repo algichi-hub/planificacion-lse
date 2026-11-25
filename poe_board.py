@@ -838,7 +838,7 @@ def render(url):
         if int(selected_year) != year:
             state["poe_v5_period"] = date(int(selected_year), 1, 1)
             st.rerun()
-        st.caption("Verde lima = real registrado (incluye cero). Sin fondo = previsto o vacío.")
+        st.caption("Verde lima = POE real (incluye cero). Sum. REAL hasta el último mes real de cada director; Sum. PREV desde el mes siguiente a DIC. Fila TOTAL: solo directores visibles.")
         st.dataframe(style_annual(data, year), hide_index=True,
                      use_container_width=True)
         refresh, sync, edit = st.columns(3)
