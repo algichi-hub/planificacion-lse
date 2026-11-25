@@ -697,13 +697,61 @@ class POEV5Tests(unittest.TestCase):
             ("110040", (Decimal("0"), Decimal("200")), (None, Decimal("200")))
         ])
 
-    def test_decimal_rejection(self):
+    def test_signed_hour_validation_and_precision(self):
         self.assertEqual(parse_hours("120,25"), Decimal("120.25"))
+        self.assertEqual(parse_hours("-120,25"), Decimal("-120.25"))
+        self.assertEqual(parse_hours(-1), Decimal(-1))
+        self.assertEqual(parse_hours("-0,5"), Decimal("-0.5"))
         self.assertIsNone(parse_hours(""))
         self.assertEqual(parse_hours(0), Decimal(0))
-        for bad in ("-1", "nan", "Infinity", "1,234", "bad"):
+        for bad in ("nan", "Infinity", "-Infinity", "1,234", "-1,234", "bad",
+                    "1000000000000", "-1000000000000"):
             with self.subTest(value=bad), self.assertRaises(ValueError):
                 parse_hours(bad)
+
+    def test_negative_months_are_preserved_in_both_annual_and_eac_forecast(self):
+        data = {"directors": {"A": "DIRECTOR"}, "visible": {"A": True},
+                "opening": {"A": None}, "opening_count": {"A": 0},
+                "hours": {
+                    ("A", date(2026, 7, 1)): (Decimal(100), None),
+                    ("A", date(2026, 8, 1)): (Decimal(-40), Decimal(-20)),
+                    ("A", date(2026, 9, 1)): (Decimal(100), Decimal(20)),
+                    ("A", date(2026, 10, 1)): (Decimal(100), None),
+                }}
+        actual, forecast, _, _ = annual_evolution(data, "A", 2026)
+        self.assertEqual(actual[6:10], [100, 60, 160, 260])
+        self.assertEqual(forecast[7:10], [80, 100, None])
+        scenarios = exhaustion_rows(data, 2026, "A", {"eac_hours": 500})
+        self.assertEqual(scenarios[0]["Ritmo (h/mes)"], 160/3)
+        self.assertEqual(scenarios[1]["Ritmo (h/mes)"], 160/3)
+        self.assertEqual(scenarios[2]["Agotamiento EAC"],
+                         "No se dispone de suficientes datos")
+        self.assertEqual(scenarios[0]["Agotamiento EAC"], "Marzo 2027")
+
+    def test_editor_allows_signed_real_and_planned_without_minimum(self):
+        source = inspect.getsource(render)
+        self.assertIn('"Real (h)", step=1, format="%.0f"', source)
+        self.assertIn('"Previsto (h)", step=1, format="%.0f"', source)
+        self.assertNotIn('"Real (h)", min_value=0', source)
+        self.assertNotIn('"Previsto (h)", min_value=0', source)
+
+    def test_director_table_requests_integer_precision_for_every_metric(self):
+        data = {"directors": {"A": "ONE"}, "visible": {"A": True},
+                "hours": {}}
+        with patch("poe_board.eac_chart"), \
+             patch("poe_board.comparison_table") as comparison, \
+             patch("poe_board.st.subheader"), patch("poe_board.st.caption"):
+            render_director_bars(data, [{
+                "code": "A", "eac_hours": Decimal(100.25),
+                "incurred_hours": Decimal(50.75), "poe_real": Decimal(-3),
+                "poe_future": Decimal(10.5),
+            }])
+        kwargs = comparison.call_args.kwargs
+        self.assertEqual(kwargs["precision"], {
+            "hours_incurred": 0, "etc_hours": 0, "etc_remaining": 0,
+            "poe_real": 0, "poe_future": 0, "poe_total": 0,
+        })
+
 
     def test_director_catalog_stable_after_source_absent(self):
         rows = [
