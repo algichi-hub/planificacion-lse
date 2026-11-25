@@ -173,7 +173,7 @@ class POEV5Tests(unittest.TestCase):
 
     def test_annual_view_contains_all_twelve_natural_months(self):
         frame, _ = annual_frame(self.data(), date.today().year)
-        self.assertEqual(frame.columns.tolist(), ["Código", "Director", *MONTHS, "Sum. REAL", "Sum. PREV", "Total"])
+        self.assertEqual(frame.columns.tolist(), ["Código", "Director", *MONTHS, "REAL", "PREV", "TOTAL"])
         self.assertEqual(frame["Código"].tolist(), ["110040", "310008"])
         self.assertEqual(len(MONTHS), 12)
 
@@ -190,18 +190,23 @@ class POEV5Tests(unittest.TestCase):
                 }}
         frame, mask = annual_frame(data, 2026)
         self.assertEqual(frame["Director"].tolist(), ["ONE", "TWO", "TOTAL"])
-        self.assertEqual(frame.loc[0, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+        self.assertEqual(frame.loc[0, ["REAL", "PREV", "TOTAL"]].tolist(),
                          [80, 60, 140])
-        self.assertEqual(frame.loc[1, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+        self.assertEqual(frame.loc[1, ["REAL", "PREV", "TOTAL"]].tolist(),
                          [50, 30, 80])
-        self.assertEqual(frame.loc[2, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+        self.assertEqual(frame.loc[2, ["REAL", "PREV", "TOTAL"]].tolist(),
                          [130, 90, 220])
         # Month totals follow what is actually visible, not the cutoff sums.
         self.assertEqual(frame.loc[2, "FEB"], -20)
         self.assertEqual(frame.loc[2, "MAR"], 100)
-        self.assertIn(LIME, mask.loc[0, "Sum. REAL"])
-        self.assertIn(LIME, mask.loc[2, "Sum. REAL"])
+        self.assertIn(LIME, mask.loc[0, "REAL"])
+        self.assertIn("#E7E9EB", mask.loc[2, "REAL"])
         self.assertIn("font-weight", mask.loc[2, "Director"])
+        for column in ("REAL", "PREV", "TOTAL"):
+            self.assertIn("font-weight: bold", mask.loc[0, column])
+            self.assertIn("#E7E9EB", mask.loc[2, column])
+        self.assertTrue(all("#E7E9EB" in mask.loc[2, col] for col in frame.columns))
+        self.assertTrue(all("font-weight: bold" in mask.loc[2, col] for col in frame.columns))
         self.assertIn("-20", style_annual(data, 2026).to_html())
 
     def test_poe_last_real_december_forces_zero_future(self):
@@ -210,9 +215,9 @@ class POEV5Tests(unittest.TestCase):
             ("A", date(2026, 12, 1)): (Decimal(-5), Decimal(500)),
         }}
         frame, _ = annual_frame(data, 2026)
-        self.assertEqual(frame.loc[0, "Sum. REAL"], 15)
-        self.assertEqual(frame.loc[0, "Sum. PREV"], 0)
-        self.assertEqual(frame.loc[0, "Total"], 15)
+        self.assertEqual(frame.loc[0, "REAL"], 15)
+        self.assertEqual(frame.loc[0, "PREV"], 0)
+        self.assertEqual(frame.loc[0, "TOTAL"], 15)
         self.assertEqual(frame.loc[0, "DIC"], -5)
 
     def test_poe_no_real_uses_forecast_only_and_zero_is_valid_cutoff(self):
@@ -224,9 +229,9 @@ class POEV5Tests(unittest.TestCase):
                     ("B", date(2026, 10, 1)): (None, Decimal(30)),
                 }}
         frame, _ = annual_frame(data, 2026)
-        self.assertEqual(frame.loc[0, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+        self.assertEqual(frame.loc[0, ["REAL", "PREV", "TOTAL"]].tolist(),
                          [0, 35, 35])
-        self.assertEqual(frame.loc[1, ["Sum. REAL", "Sum. PREV", "Total"]].tolist(),
+        self.assertEqual(frame.loc[1, ["REAL", "PREV", "TOTAL"]].tolist(),
                          [0, 30, 30])
 
     def test_poe_total_row_ignores_invisible_directors_and_changes_with_visibility(self):
@@ -239,12 +244,12 @@ class POEV5Tests(unittest.TestCase):
                 }}
         frame, _ = annual_frame(data, 2026)
         self.assertEqual(frame["Director"].tolist(), ["ONE", "TOTAL"])
-        self.assertEqual(frame.loc[1, "Total"], 15)
+        self.assertEqual(frame.loc[1, "TOTAL"], 15)
         self.assertEqual(frame.loc[1, "OCT"], 5)
         self.assertEqual(data["hours"][("B", date(2026, 10, 1))][0], Decimal(900))
         data["visible"]["B"] = True
         frame, _ = annual_frame(data, 2026)
-        self.assertEqual(frame.iloc[-1]["Total"], 915)
+        self.assertEqual(frame.iloc[-1]["TOTAL"], 915)
 
     def test_poe_totals_do_not_change_editor_or_query_path(self):
         source = inspect.getsource(annual_frame) + inspect.getsource(style_annual)
