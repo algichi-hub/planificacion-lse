@@ -10,6 +10,13 @@ from numbers import Real
 import pandas as pd
 
 
+def format_metric_hours(value, *, signed=False) -> str:
+    """Spanish-style whole-hour metric; no change to stored precision."""
+    if value is None:
+        return "—"
+    return f"{value:+,.0f} h".replace(",", ".") if signed else f"{value:,.0f} h".replace(",", ".")
+
+
 def excel_copy_frame(frame: pd.DataFrame, *, precision: dict[str, int] | None = None) -> pd.DataFrame:
     """Return a copy whose decimal cells paste as numeric values in Spanish Excel.
 
