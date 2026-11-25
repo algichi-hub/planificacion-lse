@@ -5,7 +5,7 @@ import plotly.express as px
 import psycopg
 import streamlit as st
 from dotenv import load_dotenv
-from excel_compat import excel_copy_frame, excel_csv_bytes
+from excel_compat import excel_copy_frame, excel_csv_bytes, format_metric_hours
 
 
 load_dotenv()
@@ -417,8 +417,8 @@ if view == "risks":
         delta_sum = float(bucket["deviation_hours"].sum()) if not bucket.empty else 0.0
         col.metric(
             label,
-            f"{len(bucket):,} bonos",
-            delta=f"{delta_sum:+,.1f} h Δ",
+            f"{len(bucket):,} bonos".replace(",", "."),
+            delta=f"{format_metric_hours(delta_sum, signed=True)} Δ",
             delta_color="inverse",
         )
 
@@ -665,7 +665,7 @@ director_summary["consumption_pct"] = (
 )
 
 d1, d2 = st.columns(2)
-d1.metric("Horas concedidas", "—" if granted is None else f"{granted:,.1f} h")
+d1.metric("Horas concedidas", format_metric_hours(granted))
 d2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
 
 director_chart = director_summary.melt(
@@ -762,7 +762,7 @@ render_selection_home_directores()
 st.divider()
 st.subheader("RESUMEN PROYECTOS")
 c1, c2 = st.columns(2)
-c1.metric("Horas concedidas", "—" if granted is None else f"{granted:,.1f} h")
+c1.metric("Horas concedidas", format_metric_hours(granted))
 c2.metric("Consumo", "—" if consumption is None else f"{consumption:.1%}")
 
 chart_df = filtered_projects[["project_code", "hours_granted", "hours_incurred"]].copy()
@@ -911,7 +911,7 @@ if selected_project != "Todos":
 
     st.subheader("RESUMEN ORDEN DE FABRICACIÓN")
     of1, of2 = st.columns(2)
-    of1.metric("Horas concedidas", "—" if of_granted is None else f"{of_granted:,.1f} h")
+    of1.metric("Horas concedidas", format_metric_hours(of_granted))
     of2.metric("Consumo", "—" if of_consumption is None else f"{of_consumption:.1%}")
 
     # Closed OFs have definitive OF-level hours, not bonus-level estimates.
@@ -1092,7 +1092,7 @@ if selected_project != "Todos" and selected_order != "Todas":
 
     st.subheader(f"RESUMEN BONOS OF {selected_order}")
     b1, b2 = st.columns(2)
-    b1.metric("Horas concedidas", f"{bonus_granted:,.1f} h")
+    b1.metric("Horas concedidas", format_metric_hours(bonus_granted))
     b2.metric("Consumo", "—" if bonus_consumption is None else f"{bonus_consumption:.1%}")
 
     bonus_chart = (
