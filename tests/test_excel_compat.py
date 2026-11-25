@@ -2,10 +2,19 @@
 import unittest
 from decimal import Decimal
 import pandas as pd
-from excel_compat import excel_copy_frame, excel_csv_bytes
+from excel_compat import excel_copy_frame, excel_csv_bytes, format_metric_hours
 
 
 class ExcelCopyTests(unittest.TestCase):
+    def test_global_hours_metrics_spanish_whole_hours(self):
+        self.assertEqual(format_metric_hours(Decimal("188401.00")), "188.401 h")
+        self.assertEqual(format_metric_hours(Decimal("30028.72")), "30.029 h")
+        self.assertEqual(format_metric_hours(Decimal("-975.43")), "-975 h")
+        self.assertEqual(format_metric_hours(Decimal("-30028.72"), signed=True),
+                         "-30.029 h")
+        self.assertEqual(format_metric_hours(1234.56, signed=True), "+1.235 h")
+        self.assertEqual(format_metric_hours(None), "—")
+
     def test_hours_copy_and_original_unchanged(self):
         frame = pd.DataFrame({
             "project_code": ["00123", "ABC"],
