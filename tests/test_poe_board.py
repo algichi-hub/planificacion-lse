@@ -288,6 +288,18 @@ class POEV5Tests(unittest.TestCase):
         self.assertIn('key="poe_v5_open_edit"', source)
         self.assertIn('background:#003087', source)
 
+    def test_eac_chart_legend_and_global_metric_labels(self):
+        import eac_board
+        source = inspect.getsource(eac_board.render)
+        chart_source = inspect.getsource(eac_board.chart)
+        self.assertIn('format_metric_hours(original.etc_hours.dropna().sum())', source)
+        self.assertNotIn("headline_pending", source)
+        self.assertNotIn("Horas concedidas pend.", source)
+        self.assertIn('"hours_granted": "Concedidas OF"', chart_source)
+        self.assertIn('"hours_incurred": "Incurridas OF"', chart_source)
+        self.assertNotIn('"Concedidas"', chart_source)
+        self.assertNotIn('"Incurridas"', chart_source)
+
     def test_poe_bar_temporal_caption_with_mixed_directors(self):
         data = {"directors": {"A": "ONE", "B": "TWO"},
                 "visible": {"A": True, "B": True}, "hours": {}}
