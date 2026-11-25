@@ -6,7 +6,7 @@ import plotly.express as px
 import psycopg
 from psycopg.rows import dict_row
 import streamlit as st
-from excel_compat import excel_copy_frame, excel_csv_bytes
+from excel_compat import excel_copy_frame, excel_csv_bytes, format_metric_hours
 
 def connection(url):
     return psycopg.connect(url, connect_timeout=10, row_factory=dict_row)
@@ -189,7 +189,7 @@ def render(url):
         real_dates,
         index=0,
         format_func=lambda value: value.strftime("%d/%m/%Y"),
-        help="Fecha del snapshot ERP que se utiliza para concedidas, incurridas y pendientes.",
+        help="Fecha del snapshot ERP utilizado para Concedidas OF e Incurridas OF.",
     )
     status = snapshots.loc[snapshots["id"]==selected,"status"].iloc[0]
     original = load_projects(url,selected)
@@ -203,16 +203,9 @@ def render(url):
     except psycopg.Error as exc:
         st.error(f"No se pueden consultar las horas reales: {type(exc).__name__}")
         st.stop()
-    # Reutilizar el mismo snapshot ERP para indicador y gráficos: una consulta menos.
-    pending_hours = (facts["hours_granted"] - facts["hours_incurred"]).sum()
-    headline_eac, headline_pending = st.columns(2)
-    headline_eac.metric(
+    st.metric(
         f"EAC registrado · {eac_period}",
-        f"{float(original.etc_hours.dropna().sum()):,.2f} h",
-    )
-    headline_pending.metric(
-        f"Horas concedidas pend. · Fecha {real_date:%d/%m/%Y}",
-        f"{float(pending_hours):,.2f} h",
+        format_metric_hours(original.etc_hours.dropna().sum()),
     )
 
     groups = sorted(original["management_group"].unique())
@@ -363,8 +356,8 @@ def chart(frame, category, metrics=None, palette=None, stack_groups=None):
     """Reusable bars: original EAC view or POE's chosen three-series comparison."""
     metrics = metrics or {
         "etc_hours": "EAC",
-        "hours_granted": "Concedidas",
-        "hours_incurred": "Incurridas",
+        "hours_granted": "Concedidas OF",
+        "hours_incurred": "Incurridas OF",
     }
     data = frame.melt(
         id_vars=[category],
@@ -388,8 +381,8 @@ def chart(frame, category, metrics=None, palette=None, stack_groups=None):
         barmode="group",
         color_discrete_map=palette or {
             "EAC": "#D5A547",
-            "Concedidas": "#70B7EA",
-            "Incurridas": "#1F4E8C",
+            "Concedidas OF": "#70B7EA",
+            "Incurridas OF": "#1F4E8C",
         },
         category_orders={
             category: ordered_codes,
