@@ -243,29 +243,57 @@ def queue_action(action):
 
 
 def annual_frame(data, year):
-    """One displayed value per month. Real=0 overrides any planned hours."""
-    values = []
-    masks = []
+    """Annual visible directors, per-director last-real cut, and visible-only totals.
+
+    Real zero (including negative real) counts as a recorded month; planned
+    values contribute only AFTER each director's final real month.
+    """
+    columns = ["Código", "Director", *MONTHS, "Sum. REAL", "Sum. PREV", "Total"]
+    values, masks = [], []
     for code, name in data["directors"].items():
         if not data.get("visible", {}).get(code, True):
             continue
-        row = {"Código": code, "Director": name}
-        mask = {"Código": "", "Director": ""}
-        for month, title in enumerate(MONTHS, 1):
-            real, planned = data["hours"].get((code, date(year, month, 1)), (None, None))
+        monthly = [data["hours"].get((code, date(year, month, 1)), (None, None))
+                   for month in range(1, 13)]
+        last_real = max((month for month, (real, _) in enumerate(monthly, 1)
+                         if real is not None), default=0)
+        real_sum = sum((real for month, (real, _) in enumerate(monthly, 1)
+                        if month <= last_real and real is not None), Decimal(0))
+        planned_sum = sum((planned for month, (_, planned) in enumerate(monthly, 1)
+                           if month > last_real and planned is not None), Decimal(0))
+        row = {"Código": code, "Director": name,
+               "Sum. REAL": float(real_sum), "Sum. PREV": float(planned_sum),
+               "Total": float(real_sum + planned_sum)}
+        mask = {"Código": "", "Director": "", "Sum. REAL":
+                f"background-color: {LIME}; color: #20310A",
+                "Sum. PREV": "", "Total": ""}
+        for title, (real, planned) in zip(MONTHS, monthly):
             row[title] = float(real if real is not None else planned) \
                 if real is not None or planned is not None else float("nan")
             mask[title] = f"background-color: {LIME}; color: #20310A" if real is not None else ""
         values.append(row)
         masks.append(mask)
-    return pd.DataFrame(values, columns=["Código", "Director", *MONTHS]), \
-           pd.DataFrame(masks, columns=["Código", "Director", *MONTHS])
+
+    frame = pd.DataFrame(values, columns=columns)
+    # The bottom row sums precisely the visible cells (real takes precedence
+    # over planned), not all records in Neon or hidden director rows.
+    totals = {"Código": "", "Director": "TOTAL"}
+    for column in [*MONTHS, "Sum. REAL", "Sum. PREV", "Total"]:
+        totals[column] = frame[column].sum() if not frame.empty else 0.0
+    frame.loc[len(frame)] = totals
+    total_style = "font-weight: bold; border-top: 2px solid #89939B"
+    masks.append({column: (
+        f"{total_style}; background-color: {LIME}; color: #20310A"
+        if column == "Sum. REAL" else total_style
+    ) for column in columns})
+    return frame, pd.DataFrame(masks, columns=columns)
 
 
 def style_annual(data, year):
     frame, mask = annual_frame(data, year)
     return frame.style.apply(lambda _: mask, axis=None).format(
-        {month: "{:.0f}" for month in MONTHS}, na_rep=""
+        {column: "{:.0f}" for column in [*MONTHS, "Sum. REAL", "Sum. PREV", "Total"]},
+        na_rep=""
     )
 
 
