@@ -41,9 +41,9 @@ def parse_hours(value):
         number = Decimal(str(value))
     except (InvalidOperation, ValueError):
         raise ValueError(f"Horas POE no válidas: {value}")
-    if not number.is_finite() or number < 0 or number.as_tuple().exponent < -2:
+    if not number.is_finite() or number.as_tuple().exponent < -2:
         raise ValueError(f"Horas POE no válidas (máximo 2 decimales): {value}")
-    if number >= Decimal("1000000000000"):
+    if abs(number) >= Decimal("1000000000000"):
         raise ValueError("Horas POE fuera de rango.")
     return number
 
@@ -419,6 +419,10 @@ def render_director_bars(data, sources):
         },
         "poe_directores.csv",
         "poe_directores",
+        precision={column: 0 for column in (
+            "hours_incurred", "etc_hours", "etc_remaining",
+            "poe_real", "poe_future", "poe_total",
+        )},
     )
 
 
@@ -683,9 +687,9 @@ def render(url):
                 "Código": st.column_config.TextColumn("Código", width="small"),
                 "Director": st.column_config.TextColumn("Director", width="large"),
                 "Real (h)": st.column_config.NumberColumn(
-                    "Real (h)", min_value=0, step=1, format="%.0f"),
+                    "Real (h)", step=1, format="%.0f"),
                 "Previsto (h)": st.column_config.NumberColumn(
-                    "Previsto (h)", min_value=0, step=1, format="%.0f"),
+                    "Previsto (h)", step=1, format="%.0f"),
             },
             key=f"poe_v5_grid_{period:%Y%m}_{state['poe_v5_grid_serial']}",
         )
