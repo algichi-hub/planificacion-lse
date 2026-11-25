@@ -336,11 +336,11 @@ def director_comparison(projects, director_totals):
 
 
 @st.fragment
-def comparison_table(frame, labels, filename, key):
+def comparison_table(frame, labels, filename, key, precision=None):
     """Reusable, database-free table + Spanish-Excel CSV for both EAC views."""
     columns = list(labels)
     st.dataframe(
-        excel_copy_frame(frame[columns]),
+        excel_copy_frame(frame[columns], precision=precision),
         hide_index=True,
         on_select="rerun",
         selection_mode="multi-cell",
@@ -350,7 +350,9 @@ def comparison_table(frame, labels, filename, key):
     )
     st.download_button(
         "Descargar CSV",
-        data=excel_csv_bytes(frame[columns].rename(columns=labels)),
+        data=excel_csv_bytes(frame[columns].rename(columns=labels),
+                             precision={labels.get(column, column): digits
+                                        for column, digits in (precision or {}).items()}),
         file_name=filename,
         mime="text/csv; charset=utf-8",
         key=f"csv_{key}",
