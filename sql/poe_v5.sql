@@ -15,8 +15,8 @@ CREATE TABLE poe_directors (
 CREATE TABLE poe_monthly_hours (
   code text NOT NULL REFERENCES poe_directors(code) ON DELETE RESTRICT,
   period date NOT NULL CHECK (EXTRACT(DAY FROM period) = 1),
-  real_hours numeric(14,2) CHECK (real_hours >= 0),
-  planned_hours numeric(14,2) CHECK (planned_hours >= 0),
+  real_hours numeric(14,2),
+  planned_hours numeric(14,2),
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (code, period)
 );
