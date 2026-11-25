@@ -49,6 +49,21 @@ class ExcelCopyTests(unittest.TestCase):
         self.assertEqual(rows[0]["description"], "PLANES LSA, DATOS SIGLE")
         self.assertEqual(rows[0]["etc_hours"], "8077,00")
 
+    def test_poe_director_summary_rounds_copy_and_csv_only(self):
+        frame = pd.DataFrame({
+            "Director": ["500084 PIZARRO"],
+            "Total incurrido": [Decimal("2820.75")],
+            "ETC": [Decimal("-975.43")],
+            "POE previsto": [Decimal("-120.25")],
+        })
+        precision = {key: 0 for key in ("Total incurrido", "ETC", "POE previsto")}
+        display = excel_copy_frame(frame, precision=precision)
+        self.assertEqual(display.iloc[0].tolist(),
+                         ["500084 PIZARRO", "2821", "-975", "-120"])
+        csv = excel_csv_bytes(frame, precision=precision).decode("utf-8-sig")
+        self.assertIn("500084 PIZARRO;2821;-975;-120", csv)
+        self.assertEqual(frame.loc[0, "POE previsto"], Decimal("-120.25"))
+
     def test_sign_and_zero(self):
         frame = pd.DataFrame({"deviation_hours": [-0.25, 0.0, 1000000.25]})
         self.assertEqual(
